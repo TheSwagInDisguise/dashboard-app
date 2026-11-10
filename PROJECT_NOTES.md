@@ -5,7 +5,7 @@ The GitHub repos are the source of truth — workspace snapshots of `/home/user`
 `.git/` directories and executable bits, and exclude hidden dot-folders, so local copies may
 look broken but the pushed repos are never affected.
 
-_Last updated: 2026-11-10 (Phase 1, first build — see “Session log”)_
+_Last updated: 2026-11-10 (Phase 1 delivered — CI green, v0.1.0 published, keystore copies deleted)_
 
 ---
 
@@ -109,8 +109,19 @@ Done locally (all verified):
   2 GB VM** (timed out at ~277 s once; restarted in background). Not blocking: the phone-facing
   deliverable is the APK, built by CI. (Web deploy is Phase 7 regardless; CI runners are fast.)
 
-Pushed (this same session): full scaffold to `dashboard-app` `main`, secrets set via GitHub API,
-tag `v0.1.0` → release workflow → APK published. **See “Immediate next steps”.**
+Pushed & shipped (this same session):
+- Secrets `ANDROID_KEYSTORE_BASE64` / `_PASSWORD` / `ANDROID_KEY_ALIAS`=daydeck / `_PASSWORD`
+  set via GitHub API (sealed-box). **Values were never printed or written to disk.**
+- `main` pushed; tag `v0.1.0` → workflow run **42790236151 — all jobs GREEN on first try**.
+- Release published: https://github.com/TheSwagInDisguise/dashboard-app/releases/tag/v0.1.0
+  — asset `app-release.apk` (52.5 MB)
+  — direct link: https://github.com/TheSwagInDisguise/dashboard-app/releases/download/v0.1.0/app-release.apk
+- 2026-11-10 09:30 UTC: **local keystore + password deleted** — GitHub repo secrets are now the
+  only copies. (Rebuilds work unchanged; the signing identity is preserved.)
+- A live web preview of this build is being served on port 8090 of this machine.
+
+Outstanding for the owner (Phase 1 acceptance): install APK on phone; confirm it launches;
+theme sign-off or tweaks; then Phase 2 (tasks) can start.
 
 ## 5. Environment gotchas (this Arena workspace)
 
