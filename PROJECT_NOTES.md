@@ -5,7 +5,7 @@ The GitHub repos are the source of truth — workspace snapshots of `/home/user`
 `.git/` directories and executable bits, and exclude hidden dot-folders, so local copies may
 look broken but the pushed repos are never affected.
 
-_Last updated: 2026-11-10 (Phases 4–6 shipped as v0.6.0)_
+_Last updated: 2026-11-10 (Phases 4–6 shipped as v0.6.1; v0.6.0 CI failed on missing Android core-library desugaring for flutter_local_notifications — fixed in v0.6.1)_
 
 ---
 
@@ -232,7 +232,7 @@ today view shows live tasks.
   (8 tests). **15/15 tests green; analyze clean.**
 - Web build compiles ✓; sync is HTTP-header based → works from GitHub Pages origin too (Phase 7).
 
-### 2026-11-10 — Phases 4–6 (calendar, local events + reminder, habits) — v0.6.0
+### 2026-11-10 — Phases 4–6 (calendar, local events + reminder, habits) — v0.6.1
 - **iCal sources**: Android/desktop → direct fetch of secret iCal URL (stored in SECURE storage;
   the prefs copy migrates automatically). Web → `calendar.json` in dashboard-data, refreshed hourly
   by the `refresh-calendar` Action (in-repo workflow, created 2026-11-10, verified green with
@@ -261,6 +261,10 @@ today view shows live tasks.
 - **web cron verified**: dispatched `refresh-calendar` manually → green; converter logic
   (icalendar + recurring-ical-events) validated against a synthetic ICS locally — expands
   weekly-BYDAY with UNTIL, all-day, cancelled-skip, TZID→UTC conversion correctly.
+- **v0.6.0 CI failed** (`Build signed release APK`): `flutter_local_notifications` requires
+  Android core-library desugaring — fixed by `isCoreLibraryDesugaringEnabled = true` +
+  `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")`; released as **v0.6.1**
+  (v0.6.0 tag removed, never had a release).
 - Widget tests provide all stores + feed (inert without token/URL). **30/30 tests green; analyze clean.**
 - iCal gotcha to know: feed DTSTART without Z and with TZID is read as DEVICE-LOCAL time — correct
   when the phone is in the same zone as the calendar (Australia/Sydney). Wrong otherwise (rare).
