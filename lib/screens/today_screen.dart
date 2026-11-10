@@ -3,10 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../data/demo_data.dart';
+import '../data/calendar_feed.dart';
+import '../models/event.dart';
+import '../models/habit.dart';
 import '../state/app_state.dart';
+import '../state/event_store.dart';
+import '../state/habit_store.dart';
 import '../state/tasks_store.dart';
 import '../sync/sync_service.dart';
+import '../widgets/event_sheet.dart';
 import '../theme/app_theme.dart';
 import '../theme/palettes.dart';
 import '../version.dart';
@@ -18,8 +23,8 @@ import '../widgets/terminal_card.dart';
 import '../widgets/terminal_chip.dart';
 
 /// The terminal-styled "Today" dashboard.
-/// Tasks are live (local store). Calendar events and habits still show
-/// clearly-labelled sample data until Phases 4 and 6.
+/// Everything is live: tasks, habits, local events and the read-only
+/// Google Calendar feed (via Settings → CALENDAR).
 class TodayScreen extends StatelessWidget {
   const TodayScreen({super.key});
 
@@ -33,6 +38,9 @@ class TodayScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     final store = context.watch<TasksStore>();
+    final events = context.watch<EventStore>();
+    final habits = context.watch<HabitStore>();
+    final feed = context.watch<CalendarFeed>();
     final p = app.palette;
     final now = DateTime.now();
     final dayOfYear = now.difference(DateTime(now.year, 1, 1)).inDays + 1;
@@ -53,18 +61,18 @@ class TodayScreen extends StatelessWidget {
           ),
           const SizedBox(height: 14),
 
-          // ---------- CALENDAR (sample until Phase 4) ----------
-          SectionHeader(palette: p, title: 'CALENDAR', trailing: 'sample'),
+          // ---------- CALENDAR (live) ----------
+          SectionHeader(palette: p, title: 'CALENDAR', trailing: _calendarTrailing(feed)),
           const SizedBox(height: 8),
           TerminalCard(
             palette: p,
-            children: [
-              for (final event in kDemoEvents) ...[
-                if (event != kDemoEvents.first) TerminalCardRule(palette: p),
-                _EventRow(palette: p, event: event),
-              ],
-            ],
+            children: _buildCalendarRows(context, p, events, feed, now),
           ),
+          if (_calendarNotes(feed).isNotEmpty) ...[
+            const SizedBox(height: 6),
+            for (final note in _calendarNotes(feed))
+              Text('· $note', style: mono(context, size: 8.5, color: p.dim)),
+          ],
           const SizedBox(height: 14),
 
           // ---------- TASKS (live) ----------
@@ -108,22 +116,62 @@ class TodayScreen extends StatelessWidget {
           ),
           const SizedBox(height: 14),
 
-          // ---------- HABITS (sample until Phase 6) ----------
-          SectionHeader(palette: p, title: 'HABITS', trailing: 'sample'),
+          // ---------- HABITS (live) ----------
+          SectionHeader(
+            palette: p,
+            title: 'HABITS',
+            trailing: habits.habits.isEmpty ? 'none yet' : '${habits.habits.where((h) => habits.doneToday(h.id)).length}/${habits.habits.length} today',
+          ),
           const SizedBox(height: 8),
           TerminalCard(
             palette: p,
-            children: [
-              for (final habit in kDemoHabits) ...[
-                if (habit != kDemoHabits.first) TerminalCardRule(palette: p),
-                _HabitRow(palette: p, habit: habit),
-              ],
-            ],
+            children: habits.habits.isEmpty
+                ? [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Column(
+                        children: [
+                          Text(
+                            '> no habits yet — streaks start with one tiny daily thing.',
+                            textAlign: TextAlign.center,
+                            style: mono(context, size: 10.5, color: p.dim),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'add your first habit in the HABITS tab →',
+                            textAlign: TextAlign.center,
+                            style: mono(context, size: 10.5, weight: FontWeight.w600, color: p.accent),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ]
+                : [
+                    for (final habit in habits.habits.take(4)) ...[
+                      if (habit != habits.habits.take(4).first) TerminalCardRule(palette: p),
+                      _HabitRow(
+                        palette: p,
+                        habit: habit,
+                        doneToday: habits.doneToday(habit.id),
+                        streak: habits.currentStreak(habit),
+                        onToggle: () => habits.toggleOn(habit.id),
+                      ),
+                    ],
+                    if (habits.habits.length > 4)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          '+ ${habits.habits.length - 4} more in HABITS →',
+                          textAlign: TextAlign.center,
+                          style: mono(context, size: 9.5, color: p.dim),
+                        ),
+                      ),
+                  ],
           ),
           const SizedBox(height: 12),
 
           Text(
-            'tasks are live & local · calendar & habits arrive in Phases 4 & 6',
+            'everything here is live · calendar is read-only from Google',
             textAlign: TextAlign.center,
             style: mono(context, size: 9, color: p.dim.withValues(alpha: 0.75), letterSpacing: 0.6),
           ),
@@ -133,7 +181,108 @@ class TodayScreen extends StatelessWidget {
   }
 }
 
+
+// ---------- calendar helpers ----------
+
+String _calendarTrailing(CalendarFeed feed) {
+  switch (feed.status) {
+    case CalendarStatus.disabled:
+      return 'not connected';
+    case CalendarStatus.fetching:
+      return 'refreshing…';
+    case CalendarStatus.error:
+      return 'offline';
+    case CalendarStatus.ok:
+      final t = feed.lastFetched;
+      if (t == null) return 'ok';
+      return '⇡ ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+List<String> _calendarNotes(CalendarFeed feed) {
+  final notes = [...feed.notes];
+  if (feed.status == CalendarStatus.error && feed.lastError != null) {
+    notes.insert(0, feed.lastError!);
+  }
+  return notes;
+}
+
+List<Widget> _buildCalendarRows(BuildContext context, TerminalPalette p, EventStore eventStore, CalendarFeed feed, DateTime now) {
+  final gcalToday = feed.events.where((e) => _isSameDay(e.start.toLocal(), now)).toList();
+  final localToday = eventStore.forDay(now);
+  final pendingShared = eventStore.sharedPending();
+  final hiddenShared = pendingShared.where((e) => !_isSameDay(e.start.toLocal(), now)).toList();
+
+  final rows = <Widget>[];
+
+  void gap() {
+    if (rows.isNotEmpty) rows.add(TerminalCardRule(palette: p));
+  }
+
+  if (gcalToday.isEmpty && localToday.isEmpty) {
+    final message = switch (feed.status) {
+      CalendarStatus.disabled => '> no calendar connected yet — Settings → CALENDAR holds the 2-minute guide.',
+      CalendarStatus.fetching => '> asking Google for today’s schedule…',
+      CalendarStatus.error => '> couldn’t reach your calendar — showing what we know.',
+      CalendarStatus.ok => '> nothing scheduled today — go touch grass.',
+    };
+    rows.add(Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: mono(context, size: 10.5, color: p.dim),
+      ),
+    ));
+  } else {
+    for (final event in gcalToday) {
+      gap();
+      rows.add(_TimelineRow(
+        palette: p,
+        timeLabel: _timeRange(event.start.toLocal(), event.end.toLocal(), event.allDay),
+        title: event.title,
+        caption: event.allDay ? 'all day · google calendar' : 'google calendar${event.location != null ? ' · ${event.location}' : ''}',
+        chip: TerminalChip(label: 'GCAL', color: p.accent),
+        onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('from Google Calendar — edit it there, not here')),
+        ),
+      ));
+    }
+    for (final event in localToday) {
+      gap();
+      rows.add(_LocalEventRow(
+        palette: p,
+        event: event,
+        onEdit: () => showEventSheet(context, initial: event),
+      ));
+    }
+  }
+
+  // Shared queue — pending shared events parked on other days.
+  if (hiddenShared.isNotEmpty) {
+    gap();
+    rows.add(_SharedQueueRow(palette: p, pending: hiddenShared, eventStore: eventStore));
+  }
+
+  // Add + refresh affordances.
+  gap();
+  rows.add(_AddEventRow(palette: p, onTap: () => showEventSheet(context)));
+  gap();
+  rows.add(_RefreshCalendarRow(palette: p, onTap: () => context.read<CalendarFeed>().refresh()));
+
+  return rows;
+}
+
+bool _isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+
+String _timeRange(DateTime start, DateTime end, bool allDay) {
+  if (allDay) return 'ALL-DAY';
+  String hm(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  return '${hm(start)}–${hm(end)}';
+}
+
 // ===========================================================================
+
 
 class _StatusStrip extends StatelessWidget {
   const _StatusStrip({required this.palette, required this.count});
@@ -272,45 +421,231 @@ class _HeaderRow extends StatelessWidget {
 
 // ---------- calendar ----------
 
-class _EventRow extends StatelessWidget {
-  const _EventRow({required this.palette, required this.event});
+class _TimelineRow extends StatelessWidget {
+  const _TimelineRow({
+    required this.palette,
+    required this.timeLabel,
+    required this.title,
+    required this.chip,
+    this.caption,
+    this.onTap,
+    this.trailing,
+  });
 
   final TerminalPalette palette;
-  final DemoEvent event;
+  final String timeLabel;
+  final String title;
+  final String? caption;
+  final TerminalChip chip;
+  final VoidCallback? onTap;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
-    final chip = switch (event.source) {
-      DemoEventSource.gcal => TerminalChip(label: 'GCAL', color: palette.accent),
-      DemoEventSource.sharedPending => TerminalChip(label: 'SHARED ⧗', color: palette.warn),
-      DemoEventSource.local => TerminalChip(label: 'LOCAL', color: palette.dim),
-    };
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 88,
-          child: Text(
-            '${event.start}–${event.end}',
-            style: mono(context, size: 10.5, weight: FontWeight.w600, color: palette.accent),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 92,
+            child: Text(
+              timeLabel,
+              style: mono(context, size: 10.5, weight: FontWeight.w600, color: palette.accent),
+            ),
           ),
-        ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(event.title, style: TextStyle(color: palette.text, fontSize: 12.5, height: 1.35)),
-              if (event.caption != null) ...[
-                const SizedBox(height: 2),
-                Text(event.caption!, style: mono(context, size: 9, color: palette.dim)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(color: palette.text, fontSize: 12.5, height: 1.35)),
+                if (caption != null && caption!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(caption!, style: mono(context, size: 9, color: palette.dim)),
+                ],
               ],
-            ],
+            ),
           ),
+          const SizedBox(width: 6),
+          ?trailing,
+          const SizedBox(width: 4),
+          Padding(padding: const EdgeInsets.only(top: 1), child: chip),
+        ],
+      ),
+    );
+  }
+}
+
+class _LocalEventRow extends StatelessWidget {
+  const _LocalEventRow({required this.palette, required this.event, required this.onEdit});
+
+  final TerminalPalette palette;
+  final Event event;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final timeLabel = _timeRange(event.start.toLocal(), event.end.toLocal(), event.allDay);
+    final captionParts = <String>[
+      'local · you added it in the app',
+      if (event.location != null && event.location!.isNotEmpty) event.location!,
+    ];
+    final shared = event.isShared;
+
+    return _TimelineRow(
+      palette: palette,
+      timeLabel: timeLabel,
+      title: event.title,
+      caption: captionParts.join(' · '),
+      chip: TerminalChip(
+        label: shared ? 'SHARED ⧗' : 'LOCAL',
+        color: shared ? palette.warn : palette.dim,
+      ),
+      onTap: onEdit,
+      trailing: shared
+          ? IconButton(
+              icon: Icon(Icons.check_circle_outline, size: 21, color: palette.warn),
+              tooltip: 'mark: it’s in Google Calendar',
+              onPressed: () async {
+                final store = context.read<EventStore>();
+                await store.toggleDone(event.id);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('marked — it’s in Google Calendar ✓')),
+                  );
+                }
+              },
+            )
+          : null,
+    );
+  }
+}
+
+/// One-line nudge for shared events parked on other days. Tap to mark them
+/// all done, or long-press to open the sheet for each.
+class _SharedQueueRow extends StatelessWidget {
+  const _SharedQueueRow({required this.palette, required this.pending, required this.eventStore});
+
+  final TerminalPalette palette;
+  final List<Event> pending;
+  final EventStore eventStore;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('SHARED QUEUE · ${pending.length}'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final event in pending)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${event.title}  ·  ${event.start.toLocal().day.toString().padLeft(2, '0')}/${event.start.toLocal().month.toString().padLeft(2, '0')}',
+                            style: TextStyle(color: palette.text, fontSize: 12),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            await eventStore.toggleDone(event.id);
+                            if (ctx.mounted && Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+                          },
+                          child: Text('IN GCAL ✓', style: mono(context, size: 9.5, weight: FontWeight.w700, color: palette.good)),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                Text(
+                  'anything marked here (or spotted in the Google feed automatically) disappears from your day.',
+                  style: TextStyle(color: palette.dim, fontSize: 9.5, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('close'))],
         ),
-        const SizedBox(width: 8),
-        Padding(padding: const EdgeInsets.only(top: 1), child: chip),
-      ],
+      ),
+      borderRadius: BorderRadius.circular(8),
+      child: Row(
+        children: [
+          Text('⧗', style: mono(context, size: 11, color: palette.warn)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'SHARED QUEUE · ${pending.length} not yet in Google Calendar',
+              style: mono(context, size: 9.5, weight: FontWeight.w600, color: palette.warn, letterSpacing: 0.6),
+            ),
+          ),
+          Text('tap →', style: mono(context, size: 9, color: palette.dim)),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddEventRow extends StatelessWidget {
+  const _AddEventRow({required this.palette, required this.onTap});
+
+  final TerminalPalette palette;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 3, top: 2, bottom: 2),
+        child: Row(
+          children: [
+            Text('+', style: mono(context, size: 12, weight: FontWeight.w700, color: palette.accent)),
+            const SizedBox(width: 9),
+            Text('add event…', style: mono(context, size: 11, color: palette.dim)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RefreshCalendarRow extends StatelessWidget {
+  const _RefreshCalendarRow({required this.palette, required this.onTap});
+
+  final TerminalPalette palette;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final feed = context.watch<CalendarFeed>();
+    final label = switch (feed.status) {
+      CalendarStatus.fetching => 'refreshing the calendar…',
+      CalendarStatus.error => 'tap to retry the calendar',
+      _ => 'tap to refresh the calendar',
+    };
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: feed.status == CalendarStatus.fetching ? null : onTap,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 3, top: 2, bottom: 2),
+        child: Row(
+          children: [
+            Icon(Icons.refresh, size: 12, color: palette.dim),
+            const SizedBox(width: 9),
+            Text(label, style: mono(context, size: 9.5, color: palette.dim)),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -318,45 +653,56 @@ class _EventRow extends StatelessWidget {
 // ---------- habits ----------
 
 class _HabitRow extends StatelessWidget {
-  const _HabitRow({required this.palette, required this.habit});
+  const _HabitRow({
+    required this.palette,
+    required this.habit,
+    required this.doneToday,
+    required this.streak,
+    required this.onToggle,
+  });
 
   final TerminalPalette palette;
-  final DemoHabit habit;
+  final Habit habit;
+  final bool doneToday;
+  final int streak;
+  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(habit.name, style: TextStyle(color: palette.text, fontSize: 12.5)),
-        ),
-        Row(
-          children: [
-            for (final done in habit.week)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                child: Text(
-                  done ? '●' : '○',
-                  style: mono(context, size: 10, color: done ? palette.good : palette.border),
-                ),
+    return InkWell(
+      onTap: onToggle,
+      borderRadius: BorderRadius.circular(8),
+      child: Row(
+        children: [
+          Icon(
+            doneToday ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 21,
+            color: doneToday ? palette.good : palette.dim,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              habit.title,
+              style: TextStyle(
+                color: doneToday ? palette.dim : palette.text,
+                fontSize: 12.5,
+                decoration: doneToday ? TextDecoration.lineThrough : null,
+                decorationColor: palette.dim,
               ),
-          ],
-        ),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              '${habit.streak}',
-              style: mono(context, size: 15, weight: FontWeight.w700, color: palette.good),
             ),
-            Text(
-              'DAY STREAK',
-              style: mono(context, size: 6.5, color: palette.dim, letterSpacing: 1.1),
-            ),
-          ],
-        ),
-      ],
+          ),
+          const SizedBox(width: 10),
+          Text(
+            '$streak',
+            style: mono(context, size: 15, weight: FontWeight.w700, color: streak > 0 ? palette.good : palette.dim),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            habit.cadence == 'weekly' ? 'WK' : 'DAY',
+            style: mono(context, size: 7.5, color: palette.dim, letterSpacing: 1),
+          ),
+        ],
+      ),
     );
   }
 }

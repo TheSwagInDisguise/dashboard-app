@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/palettes.dart';
 
 /// App-wide state. Loads everything from on-device storage at startup.
-/// The GitHub token (when the user sets one later) is kept ONLY in secure
+/// The GitHub token and the secret iCal address are kept ONLY in secure
 /// storage — never in shared preferences, never in code, never in logs.
 class AppState extends ChangeNotifier {
   AppState._();
@@ -14,7 +14,7 @@ class AppState extends ChangeNotifier {
   FlutterSecureStorage? _storage;
 
   DayDeckScheme _scheme = DayDeckScheme.modern; // dark-first default
-  int _reminderMinutes = 19 * 60; // 19:00
+  int _reminderMinutes = 20 * 60 + 30; // 20:30 (owner default)
   String _icalUrl = '';
   String? _githubToken;
 
@@ -46,8 +46,14 @@ class AppState extends ChangeNotifier {
             break;
           }
         }
-        s._reminderMinutes = p.getInt('reminder_minutes') ?? 19 * 60;
-        s._icalUrl = p.getString('ical_url') ?? '';
+        var storedReminder = p.getInt('reminder_minutes') ?? 20 * 60 + 30;
+        if (storedReminder == 19 * 60) {
+          // Owner moved the evening check 19:00 → 20:30 (2026-11-10).
+          storedReminder = 20 * 60 + 30;
+          try { await p.setInt('reminder_minutes', storedReminder); } catch (_) {}
+        }
+        s._reminderMinutes = storedReminder;
+        s._icalUrl = p.getString('ical_url') ?? ''; // migrated to secure storage below
       } catch (_) {
         // Corrupt prefs: fall back to defaults rather than crash.
       }
@@ -57,6 +63,20 @@ class AppState extends ChangeNotifier {
       s._githubToken = await s._storage?.read(key: 'sync_github_token');
     } catch (_) {
       s._githubToken = null;
+    }
+
+    // Secret iCal address: prefer secure storage; migrate any prefs copy over.
+    try {
+      final secure = await s._storage?.read(key: 'ical_url');
+      if (secure != null && secure.isNotEmpty) {
+        s._icalUrl = secure;
+      } else if (s._icalUrl.isNotEmpty) {
+        final legacy = s._icalUrl;
+        await s._storage?.write(key: 'ical_url', value: legacy);
+        await s._prefs?.remove('ical_url');
+      }
+    } catch (_) {
+      // Keep whatever we had (possibly the prefs copy) — never lose it.
     }
     return s;
   }
@@ -98,8 +118,15 @@ class AppState extends ChangeNotifier {
     _icalUrl = trimmed;
     notifyListeners();
     try {
-      await _prefs?.setString('ical_url', trimmed);
-    } catch (_) {}
+      if (trimmed.isEmpty) {
+        await _storage?.delete(key: 'ical_url');
+      } else {
+        await _storage?.write(key: 'ical_url', value: trimmed);
+      }
+      await _prefs?.remove('ical_url'); // it never lives in plain prefs now
+    } catch (_) {
+      // Secure storage unavailable — keep in memory for this session only.
+    }
   }
 
   // ---- GitHub sync token (stored only on this device) -------------------

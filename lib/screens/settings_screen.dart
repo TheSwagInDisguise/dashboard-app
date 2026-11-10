@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/palettes.dart';
+import '../data/calendar_feed.dart';
 import '../sync/sync_service.dart';
 import '../widgets/section_header.dart';
 import '../version.dart';
@@ -13,6 +15,7 @@ import '../version.dart';
 const String _kRepoUrl = 'https://github.com/TheSwagInDisguise/dashboard-app';
 const String _kReleasesUrl = 'https://github.com/TheSwagInDisguise/dashboard-app/releases';
 const String _kTokensUrl = 'https://github.com/settings/personal-access-tokens';
+const String _kSecretsUrl = 'https://github.com/TheSwagInDisguise/dashboard-data/settings/secrets/actions';
 
 /// Settings — appearance, sync (GitHub), reminders, calendar feed and about.
 /// The GitHub sync token is only ever held in secure device storage; this
@@ -28,6 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _tokenController;
   late final TextEditingController _icalController;
   bool _obscureToken = true;
+  bool _obscureIcal = true;
   bool _busy = false;
 
   @override
@@ -69,6 +73,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     setState(() => _tokenController.text = text);
     _snack('pasted ${text.length} characters — tap SAVE');
+  }
+
+  Future<String?> _pasteClipboard() async {
+    final data = await Clipboard.getData('text/plain');
+    final text = data?.text?.trim();
+    if (text == null || text.isEmpty) {
+      _snack('clipboard is empty');
+      return null;
+    }
+    return text;
   }
 
   Future<void> _saveToken(AppState app) async {
@@ -228,7 +242,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 14),
 
         // ============ EVENING REMINDER ============
-        SectionHeader(palette: p, title: 'EVENING REMINDER', trailing: 'phase 5'),
+        SectionHeader(palette: p, title: 'EVENING REMINDER', trailing: 'live'),
         const SizedBox(height: 8),
         _Panel(
           palette: p,
@@ -243,7 +257,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Text('pending shared events', style: TextStyle(color: p.text, fontSize: 13)),
                     const SizedBox(height: 2),
                     Text(
-                      'notifies you each evening with a one-tap link to add them to Google Calendar',
+                      'a local notification each evening while any SHARED event is still waiting to make it into Google Calendar',
                       style: TextStyle(color: p.dim, fontSize: 10.5, height: 1.4),
                     ),
                   ],
@@ -281,21 +295,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Read-only, via your calendar’s secret iCal address — the app never signs in to Google '
-                'and never writes to your calendar on its own.',
-                style: TextStyle(color: p.text, fontSize: 11.5, height: 1.5),
-              ),
+              _CalendarStatusRow(palette: p, onRefresh: () => context.read<CalendarFeed>().refresh()),
               const SizedBox(height: 10),
+              if (context.watch<CalendarFeed>().status == CalendarStatus.error &&
+                  context.watch<CalendarFeed>().lastError != null) ...[
+                Container(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                  decoration: BoxDecoration(
+                    color: p.warn.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: p.warn.withValues(alpha: 0.55)),
+                  ),
+                  child: Text(
+                    context.watch<CalendarFeed>().lastError!,
+                    style: TextStyle(color: p.warn, fontSize: 11, height: 1.45),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
               TextField(
                 controller: _icalController,
+                obscureText: _obscureIcal,
                 keyboardType: TextInputType.url,
                 autocorrect: false,
                 enableSuggestions: false,
                 style: mono(context, size: 10.5, color: p.text),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'secret address in iCal format',
                   hintText: 'https://calendar.google.com/calendar/ical/…/basic.ics',
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureIcal ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                        size: 20, color: p.dim),
+                    tooltip: _obscureIcal ? 'show' : 'hide',
+                    onPressed: () => setState(() => _obscureIcal = !_obscureIcal),
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -306,18 +339,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     label: 'SAVE URL',
                     onTap: () async {
                       await app.setIcalUrl(_icalController.text);
-                      if (context.mounted) _snack('iCal URL saved');
+                      if (context.mounted) await context.read<CalendarFeed>().refresh();
+                      if (context.mounted) _snack('calendar URL saved');
                     },
                   ),
                   const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Google refreshes the feed itself — changes can take a few hours.',
-                      style: TextStyle(color: p.dim, fontSize: 9.5, height: 1.4),
-                    ),
+                  _TerminalButton(
+                    palette: p,
+                    label: 'PASTE',
+                    small: true,
+                    onTap: () async {
+                      final text = await _pasteClipboard();
+                      if (text != null) {
+                        setState(() => _icalController.text = text.trim());
+                      }
+                    },
                   ),
                 ],
               ),
+              const SizedBox(height: 10),
+              _IcalGuide(palette: p, onOpenUrl: _openUrl),
+              const SizedBox(height: 6),
+              _WebFeedGuide(palette: p, onOpenUrl: _openUrl),
             ],
           ),
         ),
@@ -639,6 +682,199 @@ class _SyncGuide extends StatelessWidget {
         SelectableText(
           _kTokensUrl,
           style: mono(context, size: 9, color: p.dim),
+        ),
+      ],
+    );
+  }
+}
+
+/// Live calendar status + REFRESH NOW.
+class _CalendarStatusRow extends StatelessWidget {
+  const _CalendarStatusRow({required this.palette, required this.onRefresh});
+
+  final TerminalPalette palette;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    final feed = context.watch<CalendarFeed>();
+
+    final (dot, line1, line2) = switch (feed.status) {
+      CalendarStatus.disabled => (
+          p.warn,
+          'calendar not connected',
+          kIsWeb
+              ? 'web reads calendar.json (hourly Action) — set ICAL_URL in dashboard-data, guide below'
+              : 'paste your secret iCal address below — the guide is right there (~2 min)',
+        ),
+      CalendarStatus.fetching => (p.accent, 'refreshing…', 'asking your calendar for the next 31 days'),
+      CalendarStatus.ok => (
+          p.good,
+          'calendar connected',
+          feed.lastFetched == null
+              ? 'up to date'
+              : 'last refresh ${_hhmm(feed.lastFetched!)} · ${feed.events.length} events loaded',
+        ),
+      CalendarStatus.error => (
+          p.warn,
+          'calendar unreachable',
+          'showing the last good copy — it retries when you open the app or tap REFRESH',
+        ),
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('●', style: mono(context, size: 11, color: dot)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(line1, style: TextStyle(color: p.text, fontSize: 12.5, fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Text(line2, style: TextStyle(color: p.dim, fontSize: 10.5, height: 1.45)),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            _TerminalButton(
+              palette: p,
+              label: feed.status == CalendarStatus.fetching ? 'REFRESHING…' : 'REFRESH NOW',
+              small: true,
+              onTap: feed.status == CalendarStatus.fetching ? null : () => onRefresh(),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'read-only · Google refreshes the feed itself (can take a few hours)',
+                style: TextStyle(color: p.dim, fontSize: 9, height: 1.4),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String _hhmm(DateTime time) =>
+      '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+}
+
+/// Built-in plain-language guide to the Google secret iCal address.
+class _IcalGuide extends StatelessWidget {
+  const _IcalGuide({required this.palette, required this.onOpenUrl});
+
+  final TerminalPalette palette;
+  final Future<void> Function(String url) onOpenUrl;
+
+  static const _kGoogleCalendarUrl = 'https://calendar.google.com/';
+  static const _steps = [
+    '1  Open Google Calendar in a browser and sign in (use the “main” calendar or whichever you actually live by).',
+    '2  Top right: gear icon → Settings.',
+    '3  Left sidebar → click the calendar’s name → scroll to “Integrate calendar”.',
+    '4  Find “Secret address in iCal format” and copy it (it ends in basic.ics).',
+    '5  Paste it below, tap SAVE URL, done — events appear on Today.',
+    '',
+    'Treat this URL like a password. Anyone who has it can read your whole calendar.',
+    'The app never signs in to your Google account and never writes to your calendar.',
+    'It’s stored only on this device (encrypted), never in the code.',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    return ExpansionTile(
+      title: Text(
+        'how to get your secret iCal address',
+        style: mono(context, size: 11.5, weight: FontWeight.w600, color: p.accent, letterSpacing: 0.8),
+      ),
+      tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+      childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      children: [
+        for (final step in _steps)
+          if (step.isEmpty)
+            const SizedBox(height: 4)
+          else ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SelectableText(
+                step,
+                style: TextStyle(color: p.text, fontSize: 11.5, height: 1.55),
+              ),
+            ),
+            const SizedBox(height: 4),
+          ],
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: _TerminalButton(
+            palette: p,
+            label: 'OPEN GOOGLE CALENDAR →',
+            small: true,
+            onTap: () => onOpenUrl(_kGoogleCalendarUrl),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Optional: the hourly calendar.json mirror for the web build.
+class _WebFeedGuide extends StatelessWidget {
+  const _WebFeedGuide({required this.palette, required this.onOpenUrl});
+
+  final TerminalPalette palette;
+  final Future<void> Function(String url) onOpenUrl;
+
+  static const _steps = [
+    'Why: browsers block cross-origin reads of Google’s feed, so the web build can’t download it directly.',
+    'A GitHub Action inside dashboard-data does it hourly and writes calendar.json there.',
+    '',
+    '1  Open the private repo dashboard-data → Settings.',
+    '2  Secrets and variables → Actions → “New repository secret”.',
+    '3  Name: ICAL_URL — value: the same secret iCal address from the guide above.',
+    '4  Save. Then Actions tab → “refresh-calendar” → “Run workflow” (or wait for the hourly run).',
+    '5  That’s it — the web build picks the events up automatically (via your sync token).',
+    '',
+    'The secret lives only as a repo secret; it never enters code, the app or logs.',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    return ExpansionTile(
+      title: Text(
+        'optional · web builds: hourly calendar refresh',
+        style: mono(context, size: 11.5, weight: FontWeight.w600, color: p.accent, letterSpacing: 0.8),
+      ),
+      tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+      childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      children: [
+        for (final step in _steps)
+          if (step.isEmpty)
+            const SizedBox(height: 4)
+          else ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SelectableText(
+                step,
+                style: TextStyle(color: p.dim, fontSize: 11, height: 1.55),
+              ),
+            ),
+            const SizedBox(height: 4),
+          ],
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: _TerminalButton(
+            palette: p,
+            label: 'OPEN dashboard-data SECRETS →',
+            small: true,
+            onTap: () => onOpenUrl(_kSecretsUrl),
+          ),
         ),
       ],
     );

@@ -5,7 +5,7 @@ The GitHub repos are the source of truth — workspace snapshots of `/home/user`
 `.git/` directories and executable bits, and exclude hidden dot-folders, so local copies may
 look broken but the pushed repos are never affected.
 
-_Last updated: 2026-11-10 (Phase 3 sync engine shipped as v0.3.0)_
+_Last updated: 2026-11-10 (Phases 4–6 shipped as v0.6.0)_
 
 ---
 
@@ -186,6 +186,9 @@ today view shows live tasks.
 - [ ] Phase 1 — repo + CI + signed APK + theme **(this session — verify install on phone)**
 - [x] Phase 2 — tasks: local storage (JSON + backup), add/edit/complete/due/priority
 - [x] Phase 3 — sync to `dashboard-data` (Contents API, LWW + conflicts.json); sync status in header + Settings
+- [x] Phase 4 — view-only Google Calendar (iCal on Android; hourly `calendar.json` Action for web); cache + auto-refresh on resume
+- [x] Phase 5 — local events (PRIVATE/SHARED, notes+location, all-day) on Today; SHARED queue; 20:30 evening local notification; SHARED auto-hides once seen in gcal
+- [x] Phase 6 — habit tracker (daily/weekly, current week dots, streaks) on Today + HABITS tab; syncs like everything else
 - [ ] Phase 4 — iCal fetch (Android direct + data-repo hourly Action → `calendar.json`); Today view;
       token-expired banner + paste-new-token flow
 - [ ] Phase 5 — local events; shared/private split; evening reminder notification (inexact alarm,
@@ -229,6 +232,39 @@ today view shows live tasks.
   (8 tests). **15/15 tests green; analyze clean.**
 - Web build compiles ✓; sync is HTTP-header based → works from GitHub Pages origin too (Phase 7).
 
+### 2026-11-10 — Phases 4–6 (calendar, local events + reminder, habits) — v0.6.0
+- **iCal sources**: Android/desktop → direct fetch of secret iCal URL (stored in SECURE storage;
+  the prefs copy migrates automatically). Web → `calendar.json` in dashboard-data, refreshed hourly
+  by the `refresh-calendar` Action (in-repo workflow, created 2026-11-10, verified green with
+  ICAL_URL unset — skips cleanly with a notice). Web reads it via the Contents API + sync token.
+- **iCal parser** (`lib/data/ics.dart`, hand-rolled, no deps): unfolds lines, TZID-floating/local
+  times = device-local, `…Z` = UTC, all-day VALUE=DATE = local midnight; RRULE DAILY/WEEKLY(BYDAY)/
+  MONTHLY(BYMONTHDAY)/YEARLY + INTERVAL/UNTIL/COUNT; EXDATE; RECURRENCE-ID overrides; cancelled
+  skipped; unbounded series fast-forward to the window. Window: [yesterday, +31 days].
+- **Events** (`events.json`): title, start/end or all-day, PRIVATE/SHARED visibility, notes,
+  location, tombstoned deletes, LWW sync. SHARED = "I'll add this to Google Calendar myself";
+  once the same title (±30 min, or same day for all-day) appears in the feed, it is auto-marked
+  done and disappears from Today (owner choice 2026-11-10). The SHARED QUEUE dialog on Today
+  (only visible when pending shared events exist on OTHER days) allows one-tap “IN GCAL ✓”.
+- **Evening reminder**: 20:30 local notification (owner choice; default moved from 19:00, stored
+  19:00 values migrate). flutter_local_notifications + inexactAllowWhileIdle (no exact-alarm
+  permission), POST_NOTIFICATIONS + boot receivers declared; web = silent no-op. Asks permission
+  once after first frame; reschedules automatically when the time changes in Settings.
+- **Habits** (`habits.json` + `habit_logs.json`, ids `habitId|yyyy-mm-dd`): start EMPTY (owner
+  choice); daily/weekly cadence; streaks (daily = consecutive days ending today/yesterday; weekly =
+  consecutive Mon–Sun weeks with ≥1 check-in); week dots Mon..Sun; tap to toggle today; delete =
+  tombstone. Syncs through the same engine.
+- **Sync engine generalized**: `_Doc<T>` registry (tasks/events/habits/habit_logs) — ONE code path,
+  per-document LWW with the same conflicts.json parking (conflict entries now carry `doc`).
+  Local edits made DURING a sync pass now win outright (overlay by updatedAt at apply/push time) —
+  closes the old replaceAll clobber race.
+- **web cron verified**: dispatched `refresh-calendar` manually → green; converter logic
+  (icalendar + recurring-ical-events) validated against a synthetic ICS locally — expands
+  weekly-BYDAY with UNTIL, all-day, cancelled-skip, TZID→UTC conversion correctly.
+- Widget tests provide all stores + feed (inert without token/URL). **30/30 tests green; analyze clean.**
+- iCal gotcha to know: feed DTSTART without Z and with TZID is read as DEVICE-LOCAL time — correct
+  when the phone is in the same zone as the calendar (Australia/Sydney). Wrong otherwise (rare).
+
 ## 9. Command cheat sheet
 
 ```bash
@@ -247,7 +283,8 @@ GIT_ASKPASS=/tmp/askpass GIT_TERMINAL_PROMPT=0 GITHUB_TOKEN=$(cat /home/user/day
 1. ~~Phase 1~~ shipped 2026-11-10 (v0.1.0, CI green, local keystore deleted).
 2. ~~Phase 2~~ shipped 2026-11-10 (v0.2.0). Owner to install + checklist.
 3. Collect any theme tweaks; if behaviour changes are requested, cut `v0.2.1`.
-4. ~~Phase 3~~ shipped 2026-11-10 (v0.3.0): sync engine for tasks LIVE (see Phase 3 log).
-   Owner to: enter the app sync token in Settings → SYNC (in-app guide), tap SYNC NOW, then
-   verify `tasks.json` appears in the private repo and a task added on phone shows on the web
-   build / second device. Then Phase 4 (iCal calendar feed + Today view).
+4. ~~Phase 3~~ shipped v0.3.0. ~~Phases 4–6~~ shipped v0.6.0 (see Phase 4–6 log).
+   Owner to: (a) enter sync token in Settings (already done? then nothing), (b) create the app
+   sync token if not yet, (c) paste the secret iCal URL in Settings → CALENDAR (in-app guide),
+   (d) on the web build: add repo secret ICAL_URL in dashboard-data (guide in Settings), then run
+   “refresh-calendar” once manually, (e) test phone↔web with tasks/events/habits.

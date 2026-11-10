@@ -1,3 +1,3 @@
-// Single source of truth for the displayed app version.
-// Keep in sync with pubspec.yaml (version: X.Y.Z+build).
-const String kAppVersion = '0.2.0';
+/// Single source of truth for the user-visible app version.
+/// Keep in sync with `version:` in pubspec.yaml.
+const String kAppVersion = '0.6.0';
