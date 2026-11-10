@@ -2,7 +2,7 @@ name: daydeck
 description: "DayDeck — a terminal-styled daily dashboard (Android + web)"
 # Prevent accidental publishing to pub.dev
 publish_to: 'none'
-version: 0.2.0+1
+version: 0.3.0+1
 
 environment:
   sdk: ^3.13.7
@@ -14,6 +14,7 @@ dependencies:
   shared_preferences: ^2.2.3
   flutter_secure_storage: ^9.2.2
   url_launcher: ^6.3.0
+  http: ^1.2.2
 
 dev_dependencies:
   flutter_test:

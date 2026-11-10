@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:daydeck/main.dart';
 import 'package:daydeck/state/app_state.dart';
 import 'package:daydeck/state/tasks_store.dart';
+import 'package:daydeck/sync/sync_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +21,9 @@ void main() {
         providers: [
           ChangeNotifierProvider<AppState>.value(value: appState),
           ChangeNotifierProvider<TasksStore>.value(value: tasks),
+          ChangeNotifierProvider<SyncService>.value(
+            value: SyncService(tasksStore: tasks, appState: appState),
+          ),
         ],
         child: const DayDeckApp(),
       ),
@@ -48,6 +52,9 @@ void main() {
         providers: [
           ChangeNotifierProvider<AppState>.value(value: appState),
           ChangeNotifierProvider<TasksStore>.value(value: tasks),
+          ChangeNotifierProvider<SyncService>.value(
+            value: SyncService(tasksStore: tasks, appState: appState),
+          ),
         ],
         child: const DayDeckApp(),
       ),
@@ -68,6 +75,9 @@ void main() {
         providers: [
           ChangeNotifierProvider<AppState>.value(value: appState),
           ChangeNotifierProvider<TasksStore>.value(value: tasks),
+          ChangeNotifierProvider<SyncService>.value(
+            value: SyncService(tasksStore: tasks, appState: appState),
+          ),
         ],
         child: const DayDeckApp(),
       ),

@@ -121,6 +121,19 @@ class TasksStore extends ChangeNotifier {
     return b.createdAt.compareTo(a.createdAt);
   }
 
+  /// Read-only view of every item (including tombstones) for the sync engine.
+  List<Task> snapshotItems() => List<Task>.unmodifiable(_items);
+
+  /// Replaces the whole document — used by the sync engine after a merge.
+  /// Persists with the same rotate-then-write atomicity and notifies listeners.
+  Future<void> replaceAll(List<Task> items) async {
+    _items
+      ..clear()
+      ..addAll(items);
+    await _persist();
+    notifyListeners();
+  }
+
   Task? byId(String id) {
     for (final t in _items) {
       if (t.id == id && !t.deleted) return t;

@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'screens/shell.dart';
 import 'state/app_state.dart';
 import 'state/tasks_store.dart';
+import 'sync/sync_service.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -14,16 +17,21 @@ Future<void> main() async {
   final appState = await AppState.load();
   final tasksStore = TasksStore();
   await tasksStore.load();
+  final sync = SyncService(tasksStore: tasksStore, appState: appState);
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<AppState>.value(value: appState),
         ChangeNotifierProvider<TasksStore>.value(value: tasksStore),
+        ChangeNotifierProvider<SyncService>.value(value: sync),
       ],
       child: const DayDeckApp(),
     ),
   );
+
+  // First sync in the background — never blocks the UI.
+  unawaited(sync.syncNow());
 }
 
 class DayDeckApp extends StatelessWidget {

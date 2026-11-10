@@ -5,7 +5,7 @@ The GitHub repos are the source of truth — workspace snapshots of `/home/user`
 `.git/` directories and executable bits, and exclude hidden dot-folders, so local copies may
 look broken but the pushed repos are never affected.
 
-_Last updated: 2026-11-10 (Phase 2 implemented & released as v0.2.0)_
+_Last updated: 2026-11-10 (Phase 3 sync engine shipped as v0.3.0)_
 
 ---
 
@@ -185,7 +185,7 @@ today view shows live tasks.
       24h/DD-MM-YYYY · keystore generate-and-hand-off-via-secrets · MIT licence
 - [ ] Phase 1 — repo + CI + signed APK + theme **(this session — verify install on phone)**
 - [x] Phase 2 — tasks: local storage (JSON + backup), add/edit/complete/due/priority
-- [ ] Phase 3 — sync to `dashboard-data` (Contents API, LWW + conflicts.json); sync status in header
+- [x] Phase 3 — sync to `dashboard-data` (Contents API, LWW + conflicts.json); sync status in header + Settings
 - [ ] Phase 4 — iCal fetch (Android direct + data-repo hourly Action → `calendar.json`); Today view;
       token-expired banner + paste-new-token flow
 - [ ] Phase 5 — local events; shared/private split; evening reminder notification (inexact alarm,
@@ -206,6 +206,29 @@ today view shows live tasks.
 5. **Rotate build token?** — paste-into-chat exposure was owner’s call; suggest rotating when
    Phase 1 is verified.
 
+### 2026-11-10 — Phase 3 (sync to GitHub data repo)
+- **Storage of record**: `TheSwagInDisguise/dashboard-data` — `tasks.json`, `conflicts.json`,
+  `manifest.json` (all seeded 2026-11-10 with pristine empty documents).
+- **Verified live against the real repo** (via API, using the build token): 404-on-fresh → create,
+  base64 round-trip, correct-sha PUT → 200, **stale-sha PUT → 409** (the exact precondition the
+  retry-once path depends on), manifest/conflicts seeding. Repo restored to pristine empty seed.
+- Engine: `lib/sync/github_client.dart` (Contents API, no dart:io → web-safe), `lib/sync/merger.dart`
+  (pure LWW, deterministic tiebreak, losers tagged local/remote), `lib/sync/sync_service.dart`
+  (orchestration). Merge rule: per-item LWW on `updatedAt`; any semantic loser is parked —
+  **both** in repo `conflicts.json` and an on-device pending queue (`sync_conflicts_pending`) that
+  retries until the remote write succeeds. Losers can exceed the 200-entry cap? capped to newest
+  200 remote / 500 local.
+- Cadence: on app open (unawaited, never blocks UI), on resume via debounce after ANY mutation
+  (4s), manual SYNC NOW. Concurrent calls coalesce (single queued rerun). No background service.
+- UX: Today status strip shows `⇡ synced HH:MM` / `⇡ syncing…` / `⚠ sync paused` / `⇡ offline`
+  (tap for explanation). Settings → SYNC shows live status + SYNC NOW + inline guidance when the
+  token is rejected. **Shell-level persistent banner** when GitHub rejects the token (401/403),
+  one tap jumps to Settings to paste a new one. Token removed → sync turns off cleanly.
+- Conflict detection granularity: only semantically-differing items are parked (LWW applies).
+- Widget tests provide a SyncService with NO token → inert (no network). Merge logic unit-tested
+  (8 tests). **15/15 tests green; analyze clean.**
+- Web build compiles ✓; sync is HTTP-header based → works from GitHub Pages origin too (Phase 7).
+
 ## 9. Command cheat sheet
 
 ```bash
@@ -224,5 +247,7 @@ GIT_ASKPASS=/tmp/askpass GIT_TERMINAL_PROMPT=0 GITHUB_TOKEN=$(cat /home/user/day
 1. ~~Phase 1~~ shipped 2026-11-10 (v0.1.0, CI green, local keystore deleted).
 2. ~~Phase 2~~ shipped 2026-11-10 (v0.2.0). Owner to install + checklist.
 3. Collect any theme tweaks; if behaviour changes are requested, cut `v0.2.1`.
-4. Phase 3 kickoff: sync to `dashboard-data` (Contents API, LWW + conflicts.json, schemaVersion
-   manifest); start with read-only pull + push of tasks; conflict UI minimal; token-expired banner.
+4. ~~Phase 3~~ shipped 2026-11-10 (v0.3.0): sync engine for tasks LIVE (see Phase 3 log).
+   Owner to: enter the app sync token in Settings → SYNC (in-app guide), tap SYNC NOW, then
+   verify `tasks.json` appears in the private repo and a task added on phone shows on the web
+   build / second device. Then Phase 4 (iCal calendar feed + Today view).

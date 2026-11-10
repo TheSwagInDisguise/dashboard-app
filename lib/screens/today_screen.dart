@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../data/demo_data.dart';
 import '../state/app_state.dart';
 import '../state/tasks_store.dart';
+import '../sync/sync_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/palettes.dart';
 import '../version.dart';
@@ -150,18 +151,52 @@ class _StatusStrip extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Text('●', style: mono(context, size: 10, color: palette.good)),
-              const SizedBox(width: 6),
-              Text('local-first', style: mono(context, size: 10, color: palette.dim)),
-            ],
-          ),
+          _SyncIndicator(palette: palette),
           _LiveClock(palette: palette),
           Text('v$kAppVersion', style: mono(context, size: 10, color: palette.dim)),
         ],
       ),
     );
+  }
+}
+
+class _SyncIndicator extends StatelessWidget {
+  const _SyncIndicator({required this.palette});
+
+  final TerminalPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final sync = context.watch<SyncService>();
+    final (color, label, tip) = switch (sync.status) {
+      SyncStatus.disabled => (palette.dim, 'local · no sync', 'no token set — everything stays on this device'),
+      SyncStatus.idle => (palette.accent, '⇡ pending…', 'waiting for first sync'),
+      SyncStatus.syncing => (palette.accent, '⇡ syncing…', 'talking to GitHub'),
+      SyncStatus.ok => (palette.good, '⇡ ${_fmt(sync.lastSyncedAt)}', 'synced with dashboard-data — you are good'),
+      SyncStatus.tokenInvalid => (palette.bad, '⚠ sync paused', 'GitHub rejected your token — Settings → SYNC'),
+      SyncStatus.error => (palette.warn, '⇡ offline', 'could not reach GitHub — will retry automatically'),
+    };
+
+    return InkWell(
+      onTap: () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tip))),
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: Row(
+          children: [
+            Text('●', style: mono(context, size: 10, color: color)),
+            const SizedBox(width: 6),
+            Text(label, style: mono(context, size: 10, color: color)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _fmt(DateTime? time) {
+    if (time == null) return 'synced';
+    final t = time.toLocal();
+    return 'synced ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
   }
 }
 

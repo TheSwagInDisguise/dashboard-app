@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/palettes.dart';
+import '../sync/sync_service.dart';
 import '../widgets/section_header.dart';
 import '../version.dart';
 
@@ -145,20 +146,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Text('●', style: mono(context, size: 11, color: app.tokenConfigured ? p.good : p.warn)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      app.tokenConfigured
-                          ? 'token stored on this device — sync arrives in Phase 3'
-                          : 'no token yet — the app keeps everything local for now',
-                      style: TextStyle(color: p.text, fontSize: 12.5, height: 1.4),
-                    ),
-                  ),
-                ],
-              ),
+              _SyncStatusRow(palette: p),
               const SizedBox(height: 10),
               Text(
                 'Shared data lives in your private GitHub repo “dashboard-data” as JSON files. '
@@ -168,6 +156,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 10),
               _SyncGuide(palette: p, onOpenUrl: _openUrl),
               const SizedBox(height: 10),
+              if (context.watch<SyncService>().status == SyncStatus.tokenInvalid) ...[
+                Container(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                  decoration: BoxDecoration(
+                    color: p.bad.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: p.bad.withValues(alpha: 0.55)),
+                  ),
+                  child: Text(
+                    'GitHub rejected this token. Paste a fresh one below — nothing is lost, your data just stays on this device until then.',
+                    style: TextStyle(color: p.bad, fontSize: 11, height: 1.45),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
               TextField(
                 controller: _tokenController,
                 obscureText: _obscureToken,
@@ -347,6 +350,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 // ---------------------------------------------------------------------------
+
+/// Live sync status + manual SYNC NOW button.
+class _SyncStatusRow extends StatelessWidget {
+  const _SyncStatusRow({required this.palette});
+
+  final TerminalPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    final sync = context.watch<SyncService>();
+
+    final (dot, line1, line2) = switch (sync.status) {
+      SyncStatus.disabled => (
+          p.warn,
+          'sync is off',
+          'no token — everything works locally on this device',
+        ),
+      SyncStatus.idle => (p.accent, 'ready to sync', 'waiting for the first run…'),
+      SyncStatus.syncing => (p.accent, 'syncing…', 'talking to GitHub…'),
+      SyncStatus.ok => (p.good, 'in sync', _lastSynced(sync.lastSyncedAt)),
+      SyncStatus.tokenInvalid => (
+          p.bad,
+          'token rejected by GitHub',
+          'expired, revoked, or missing “Contents: Read and write” on dashboard-data',
+        ),
+      SyncStatus.error => (
+          p.warn,
+          'last sync failed',
+          'usually no internet connection — retries automatically',
+        ),
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('●', style: mono(context, size: 11, color: dot)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(line1, style: TextStyle(color: p.text, fontSize: 12.5, fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Text(line2, style: TextStyle(color: p.dim, fontSize: 10.5, height: 1.45)),
+        const SizedBox(height: 8),
+        _TerminalButton(
+          palette: p,
+          label: sync.status == SyncStatus.syncing ? 'SYNCING…' : 'SYNC NOW',
+          small: true,
+          onTap: sync.status == SyncStatus.syncing ? null : () => context.read<SyncService>().syncNow(),
+        ),
+      ],
+    );
+  }
+
+  String _lastSynced(DateTime? time) {
+    if (time == null) return 'synced';
+    final t = time.toLocal();
+    final day = '${t.day.toString().padLeft(2, '0')}/${t.month.toString().padLeft(2, '0')}';
+    final clock = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    return 'last synced $day · $clock';
+  }
+}
 
 class _Panel extends StatelessWidget {
   const _Panel({required this.palette, required this.child});

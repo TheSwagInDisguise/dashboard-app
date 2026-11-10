@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/palettes.dart';
+import '../sync/sync_service.dart';
 import '../widgets/scanlines.dart';
 import 'habits_screen.dart';
 import 'settings_screen.dart';
@@ -20,6 +21,55 @@ class Shell extends StatefulWidget {
   State<Shell> createState() => _ShellState();
 }
 
+/// Persistent warning shown whenever GitHub has rejected the sync token.
+/// Everything in the app keeps working locally; tapping jumps to Settings.
+class _TokenExpiredBanner extends StatelessWidget {
+  const _TokenExpiredBanner({required this.palette, required this.onFix});
+
+  final TerminalPalette palette;
+  final VoidCallback onFix;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: palette.bad.withValues(alpha: 0.14),
+      child: InkWell(
+        onTap: onFix,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: palette.bad.withValues(alpha: 0.6))),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: palette.bad, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'sync paused — GitHub rejected your token (expired or revoked?)',
+                  style: TextStyle(color: palette.bad, fontSize: 11, height: 1.35),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'FIX →',
+                style: TextStyle(
+                  color: palette.bad,
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ShellState extends State<Shell> {
   int _index = 0;
 
@@ -33,28 +83,37 @@ class _ShellState extends State<Shell> {
   @override
   Widget build(BuildContext context) {
     final palette = context.watch<AppState>().palette;
+    final sync = context.watch<SyncService>();
 
     return Scaffold(
       backgroundColor: palette.bg,
       body: SafeArea(
         bottom: false,
-        child: Stack(
+        child: Column(
           children: [
-            Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 640),
-                child: IndexedStack(
-                  index: _index,
-                  children: const [
-                    TodayScreen(),
-                    TasksScreen(),
-                    HabitsScreen(),
-                    SettingsScreen(),
-                  ],
-                ),
+            if (sync.status == SyncStatus.tokenInvalid)
+              _TokenExpiredBanner(palette: palette, onFix: () => setState(() => _index = 3)),
+            Expanded(
+              child: Stack(
+                children: [
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 640),
+                      child: IndexedStack(
+                        index: _index,
+                        children: const [
+                          TodayScreen(),
+                          TasksScreen(),
+                          HabitsScreen(),
+                          SettingsScreen(),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Scanlines(alpha: palette.scanlineAlpha),
+                ],
               ),
             ),
-            Scanlines(alpha: palette.scanlineAlpha),
           ],
         ),
       ),

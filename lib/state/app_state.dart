@@ -105,6 +105,10 @@ class AppState extends ChangeNotifier {
   // ---- GitHub sync token (stored only on this device) -------------------
   bool get tokenConfigured => (_githubToken?.isNotEmpty ?? false);
 
+  /// The raw token. Used ONLY by the sync engine to authenticate GitHub API
+  /// calls over HTTPS. Never logged, never displayed, never synced.
+  String? get syncToken => _githubToken;
+
   /// Returns false when the input is empty or secure storage is unavailable.
   Future<bool> saveToken(String token) async {
     final trimmed = token.trim();
