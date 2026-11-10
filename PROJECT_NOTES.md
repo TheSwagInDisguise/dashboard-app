@@ -5,7 +5,7 @@ The GitHub repos are the source of truth — workspace snapshots of `/home/user`
 `.git/` directories and executable bits, and exclude hidden dot-folders, so local copies may
 look broken but the pushed repos are never affected.
 
-_Last updated: 2026-11-10 (Phases 4–6 shipped as v0.6.1; v0.6.0 CI failed on missing Android core-library desugaring for flutter_local_notifications — fixed in v0.6.1)_
+_Last updated: 2026-11-10 (foldable/Z Fold 5 two-pane layout shipped as v0.7.0)_
 
 ---
 
@@ -268,6 +268,63 @@ today view shows live tasks.
 - Widget tests provide all stores + feed (inert without token/URL). **30/30 tests green; analyze clean.**
 - iCal gotcha to know: feed DTSTART without Z and with TZID is read as DEVICE-LOCAL time — correct
   when the phone is in the same zone as the calendar (Australia/Sydney). Wrong otherwise (rare).
+
+## Phase 7 — Z Fold 5 inner-display layout — v0.7.0 (2026-11-10)
+
+Owner uses the app on a **Galaxy Z Fold 5**; the inner 7.6" display was previously rendered
+as a stretched phone column. Owner explicitly rejected a side-rail/drawer navigation
+("not what I would call good use of the space"), so v0.7.0 is a **density** change, not a
+navigation change. Bottom tab bar stays on every screen size.
+
+- **Wide breakpoint**: `MediaQuery.sizeOf(context).width >= 700` (Fold cover ≈ 360dp, inner
+  ≈ 800+dp; phone ≤ 450 unaffected). Content cap raised 640 → **1180dp** above the breakpoint.
+- **Today**: calendar (flex 7) | tasks+habits (flex 6) two-pane row above 700dp; full-width
+  status strip and header in both layouts; below 700dp the original single-column order is
+  byte-identical.
+- **Tasks**: header/stats full width; open tasks + ADD TASK (flex 7) | DONE column (flex 6);
+  DONE panel shows a placeholder instead of vanishing when empty (wide only). Narrow unchanged.
+- **Habits**: ≥ 700dp renders a two-column card grid (Wrap, computed card width =
+  (w − 28 − 12) / 2) instead of one long list; narrow keeps the TerminalCard list.
+- **Settings**: ≥ 700dp splits APPEARANCE+SYNC | EVENING REMINDER+CALENDAR+ABOUT into two
+  columns; narrow unchanged. Any one-column-capable section stays untouched.
+- **Bottom tab bar**: tab cluster capped at 640dp and centred on wide screens via
+  LayoutBuilder + Padding (NOT Center — see gotcha below).
+- **Testing gotcha (learned v0.7.0)**: `Center`/`Align` in a bottomNavigationBar's height
+  chain EXPANDS to the loose max height, eating the entire body height (IndexedStack → 800×0;
+  every screen rendered zero-height; flutter_test caught it as `findsOneWidget` failures).
+  Fix: keep the height chain intrinsic (Row/Padding), never Align-class widgets.
+- **Testing gotcha #2**: Rows/Columns with `CrossAxisAlignment.stretch` inside scrollables
+  need `mainAxisSize: MainAxisSize.min` or intrinsic children — else "unbounded height"
+  breaks the whole subtree silently (analyze stays clean).
+- Widget tests still tap through the shell; **30/30 green; analyze clean.**
+- Web build (`build/web`) rebuilt for v0.7.0 and served on port 8090 for quick review.
+
+## Roadmap — additive features that do NOT bloat DayDeck (ranked by value/effort)
+
+Rule: every item below REUSES existing machinery (tasks/habits/events stores, GitHub sync,
+notification stack, iCal feed). Nothing here adds an account, a server, or a social graph.
+
+| # | Feature | Effort | What / why |
+|---|---|---|---|
+| 1 | **Home-screen widget (Android)** | M | Agenda + open-count + habit quick-check on the cover display. Biggest win for a foldable: at-a-glance without opening. Reuses stores + a couple of quick SQLite reads. |
+| 2 | **Share → DayDeck quick capture** (ACTION_SEND) | S–M | Share text/URL from any app → creates a task with the text as title (+ link in notes). One intent-filter; huge capture speedup. |
+| 3 | **Quick Settings tile** ("Add task") | S | TileService → one-tap dialog-less capture or jump to the add sheet. Nice for between-meetings capture. |
+| 4 | **Search across tasks/events/habits** | S–M | One query box on Today (or a ⌘K-style palette); filters lists client-side; no indexing infra needed. |
+| 5 | **Conflict viewer in Settings** | S | `conflicts.json` losers are currently invisible — surface them read-only with a "restore as new task/event" action. Reuses existing conflicts.json. |
+| 6 | **App shortcuts (long-press icon)** | S | "New task", "Sync now", "Next event". Static shortcuts XML + intent handling. |
+| 7 | **PWA / add-to-homescreen polish** | S | Manifest + theme-color + splash for the web build; one-tap install UX parity with the APK. |
+| 8 | **Biometric lock (optional)** | S–M | `local_auth`, off by default; gate app open/resume, not individual screens. App lock for a screen that shows your calendar. |
+| 9 | **Evening reminder upgrades** | S | Snooze action on the notification + tap-to-open SHARED-queue (writes intent→tab+dialog). Complements Phase 4–6. |
+| 10 | **AMOLED palette + per-scheme tweaks** | S | True-black scheme for the fold panel; reuses palette system. |
+| 11 | **One-tap JSON export / share backup** | S | Settings → export tasks/events/habits as a JSON share intent. Cheap disaster-recovery for the data repo. |
+| 12 | **Weekly completion % on Today** | S | X% of habits + tasks done this week from existing logs — pure derived metric. |
+
+**Deliberately rejected (bloat):** social/sharing of tasks, cloud AI summaries, multiple
+accounts/calendars, gcal write-back sync loops, in-app browser, avatars/gamification,
+per-habit notifications, dark-mode scheduling. Each adds ongoing complexity or permissions
+for zero daily value to a single-user dashboard.
+
+**Suggested order:** 2 → 3 → 1 → 4 → 5 (capture loop first, then visibility), rest on demand.
 
 ## 9. Command cheat sheet
 

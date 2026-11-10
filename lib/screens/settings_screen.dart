@@ -129,6 +129,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 16),
 
+        if (MediaQuery.sizeOf(context).width >= 700)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ...[
         // ============ APPEARANCE ============
         SectionHeader(palette: p, title: 'APPEARANCE'),
         const SizedBox(height: 8),
@@ -147,7 +157,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
         ],
         const SizedBox(height: 10),
-
+                    ],
+                    ...[
         // ============ SYNC (GitHub) ============
         SectionHeader(
           palette: p,
@@ -240,7 +251,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 14),
-
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ...[
         // ============ EVENING REMINDER ============
         SectionHeader(palette: p, title: 'EVENING REMINDER', trailing: 'live'),
         const SizedBox(height: 8),
@@ -286,7 +307,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 14),
-
+                    ],
+                    ...[
         // ============ CALENDAR (iCal) ============
         SectionHeader(palette: p, title: 'GOOGLE CALENDAR', trailing: 'view-only'),
         const SizedBox(height: 8),
@@ -365,7 +387,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 14),
-
+                    ],
+                    ...[
         // ============ ABOUT ============
         SectionHeader(palette: p, title: 'ABOUT'),
         const SizedBox(height: 8),
@@ -387,6 +410,278 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
         ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          )
+        else ...[
+            ...[
+        // ============ APPEARANCE ============
+        SectionHeader(palette: p, title: 'APPEARANCE'),
+        const SizedBox(height: 8),
+        for (final entry in kPalettes.entries) ...[
+          _SchemeTile(
+            paletteOfOption: entry.value,
+            selected: entry.key == app.scheme,
+            activeScheme: app.scheme,
+            onTap: () => app.setScheme(entry.key),
+            accent: p.accent,
+            textColor: p.text,
+            dimColor: p.dim,
+            borderColor: p.border,
+            panelColor: p.panel,
+          ),
+          const SizedBox(height: 8),
+        ],
+        const SizedBox(height: 10),
+            ],
+            ...[
+        // ============ SYNC (GitHub) ============
+        SectionHeader(
+          palette: p,
+          title: 'SYNC',
+          trailing: app.tokenConfigured ? 'token set' : 'not set',
+        ),
+        const SizedBox(height: 8),
+        _Panel(
+          palette: p,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SyncStatusRow(palette: p),
+              const SizedBox(height: 10),
+              Text(
+                'Shared data lives in your private GitHub repo “dashboard-data” as JSON files. '
+                'The app talks to it through the GitHub API — no server, ever.',
+                style: TextStyle(color: p.dim, fontSize: 11, height: 1.5),
+              ),
+              const SizedBox(height: 10),
+              _SyncGuide(palette: p, onOpenUrl: _openUrl),
+              const SizedBox(height: 10),
+              if (context.watch<SyncService>().status == SyncStatus.tokenInvalid) ...[
+                Container(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                  decoration: BoxDecoration(
+                    color: p.bad.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: p.bad.withValues(alpha: 0.55)),
+                  ),
+                  child: Text(
+                    'GitHub rejected this token. Paste a fresh one below — nothing is lost, your data just stays on this device until then.',
+                    style: TextStyle(color: p.bad, fontSize: 11, height: 1.45),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              TextField(
+                controller: _tokenController,
+                obscureText: _obscureToken,
+                autocorrect: false,
+                enableSuggestions: false,
+                style: mono(context, size: 12, color: p.text),
+                decoration: InputDecoration(
+                  labelText: 'token (github_pat_…)',
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: _obscureToken ? 'show' : 'hide',
+                        icon: Icon(_obscureToken ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
+                        onPressed: () => setState(() => _obscureToken = !_obscureToken),
+                      ),
+                      IconButton(
+                        tooltip: 'paste',
+                        icon: const Icon(Icons.content_paste_go, size: 20),
+                        onPressed: _pasteToken,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                children: [
+                  _TerminalButton(
+                    palette: p,
+                    label: _busy ? 'SAVING…' : 'SAVE TOKEN',
+                    primary: true,
+                    onTap: _busy ? null : () => _saveToken(app),
+                  ),
+                  if (app.tokenConfigured)
+                    _TerminalButton(
+                      palette: p,
+                      label: 'REMOVE',
+                      danger: true,
+                      onTap: () => _clearToken(app),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'stored only in this device’s secure storage · never in code, never synced,\n'
+                'never shown again — remove it below to wipe it completely',
+                style: mono(context, size: 9, color: p.bad.withValues(alpha: 0.85), letterSpacing: 0.3),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+            ],
+            ...[
+        // ============ EVENING REMINDER ============
+        SectionHeader(palette: p, title: 'EVENING REMINDER', trailing: 'live'),
+        const SizedBox(height: 8),
+        _Panel(
+          palette: p,
+          child: Row(
+            children: [
+              Icon(Icons.notifications_none_outlined, color: p.accent, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('pending shared events', style: TextStyle(color: p.text, fontSize: 13)),
+                    const SizedBox(height: 2),
+                    Text(
+                      'a local notification each evening while any SHARED event is still waiting to make it into Google Calendar',
+                      style: TextStyle(color: p.dim, fontSize: 10.5, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                children: [
+                  Text(app.reminderLabel, style: mono(context, size: 16, weight: FontWeight.w700, color: p.accent)),
+                  const SizedBox(height: 4),
+                  _TerminalButton(
+                    palette: p,
+                    label: 'CHANGE',
+                    small: true,
+                    onTap: () async {
+                      final current = TimeOfDay(hour: app.reminderMinutes ~/ 60, minute: app.reminderMinutes % 60);
+                      final picked = await showTimePicker(context: context, initialTime: current);
+                      if (picked != null) {
+                        await app.setReminderMinutes(picked.hour * 60 + picked.minute);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+            ],
+            ...[
+        // ============ CALENDAR (iCal) ============
+        SectionHeader(palette: p, title: 'GOOGLE CALENDAR', trailing: 'view-only'),
+        const SizedBox(height: 8),
+        _Panel(
+          palette: p,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _CalendarStatusRow(palette: p, onRefresh: () => context.read<CalendarFeed>().refresh()),
+              const SizedBox(height: 10),
+              if (context.watch<CalendarFeed>().status == CalendarStatus.error &&
+                  context.watch<CalendarFeed>().lastError != null) ...[
+                Container(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                  decoration: BoxDecoration(
+                    color: p.warn.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: p.warn.withValues(alpha: 0.55)),
+                  ),
+                  child: Text(
+                    context.watch<CalendarFeed>().lastError!,
+                    style: TextStyle(color: p.warn, fontSize: 11, height: 1.45),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              TextField(
+                controller: _icalController,
+                obscureText: _obscureIcal,
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                enableSuggestions: false,
+                style: mono(context, size: 10.5, color: p.text),
+                decoration: InputDecoration(
+                  labelText: 'secret address in iCal format',
+                  hintText: 'https://calendar.google.com/calendar/ical/…/basic.ics',
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureIcal ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                        size: 20, color: p.dim),
+                    tooltip: _obscureIcal ? 'show' : 'hide',
+                    onPressed: () => setState(() => _obscureIcal = !_obscureIcal),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _TerminalButton(
+                    palette: p,
+                    label: 'SAVE URL',
+                    onTap: () async {
+                      await app.setIcalUrl(_icalController.text);
+                      if (context.mounted) await context.read<CalendarFeed>().refresh();
+                      if (context.mounted) _snack('calendar URL saved');
+                    },
+                  ),
+                  const SizedBox(width: 10),
+                  _TerminalButton(
+                    palette: p,
+                    label: 'PASTE',
+                    small: true,
+                    onTap: () async {
+                      final text = await _pasteClipboard();
+                      if (text != null) {
+                        setState(() => _icalController.text = text.trim());
+                      }
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _IcalGuide(palette: p, onOpenUrl: _openUrl),
+              const SizedBox(height: 6),
+              _WebFeedGuide(palette: p, onOpenUrl: _openUrl),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+            ],
+            ...[
+        // ============ ABOUT ============
+        SectionHeader(palette: p, title: 'ABOUT'),
+        const SizedBox(height: 8),
+        _Panel(
+          palette: p,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _AboutRow(palette: p, label: 'version', value: '$kAppVersion+1'),
+              _AboutRow(palette: p, label: 'code', value: 'TheSwagInDisguise/dashboard-app', onTap: () => _openUrl(_kRepoUrl)),
+              _AboutRow(palette: p, label: 'releases', value: 'installable APK builds', onTap: () => _openUrl(_kReleasesUrl)),
+              _AboutRow(palette: p, label: 'data', value: 'private repo dashboard-data'),
+              _AboutRow(palette: p, label: 'font', value: 'JetBrains Mono · SIL OFL'),
+              const SizedBox(height: 6),
+              Text(
+                'no personal data, tokens or calendar content are stored in the code, the APK or the web build.',
+                style: mono(context, size: 9, color: p.dim, letterSpacing: 0.3),
+              ),
+            ],
+          ),
+        ),
+            ],
+        ],
       ],
     );
   }

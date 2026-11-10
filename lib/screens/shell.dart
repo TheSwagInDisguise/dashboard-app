@@ -70,6 +70,10 @@ class _TokenExpiredBanner extends StatelessWidget {
   }
 }
 
+/// Width at/above which fold/tablet layouts kick in (Fold 5 cover ≈ 360,
+/// inner ≈ 800+; phones sit below 700).
+const double _kWideBreakpoint = 700;
+
 class _ShellState extends State<Shell> {
   int _index = 0;
 
@@ -98,7 +102,9 @@ class _ShellState extends State<Shell> {
                 children: [
                   Center(
                     child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 640),
+                      constraints: BoxConstraints(
+                        maxWidth: MediaQuery.sizeOf(context).width >= _kWideBreakpoint ? 1180 : 640,
+                      ),
                       child: IndexedStack(
                         index: _index,
                         children: const [
@@ -150,47 +156,60 @@ class _TerminalTabBar extends StatelessWidget {
           decoration: BoxDecoration(
             border: Border(top: BorderSide(color: palette.border)),
           ),
-          child: Row(
-            children: [
-              for (var i = 0; i < tabs.length; i++)
-                Expanded(
-                  child: InkWell(
-                    onTap: () => onChanged(i),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          top: BorderSide(
-                            color: i == index ? palette.accent : Colors.transparent,
-                            width: 2,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // On fold/tablet widths, keep the tab cluster centred instead of
+              // stretching the tabs across the whole inner display. Padding is
+              // used (not Center) so the bar's height stays intrinsic.
+              const maxCluster = 640.0;
+              final spare = (constraints.maxWidth - maxCluster) / 2;
+              final inset = spare > 0 ? spare : 0.0;
+              return Padding(
+                padding: EdgeInsets.symmetric(horizontal: inset),
+                child: Row(
+                  children: [
+                    for (var i = 0; i < tabs.length; i++)
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => onChanged(i),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 9),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                top: BorderSide(
+                                  color: i == index ? palette.accent : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  tabs[i].icon,
+                                  size: 20,
+                                  color: i == index ? palette.accent : palette.dim,
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  tabs[i].label,
+                                  style: mono(
+                                    context,
+                                    size: 9,
+                                    weight: FontWeight.w600,
+                                    color: i == index ? palette.accent : palette.dim,
+                                    letterSpacing: 2.4,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            tabs[i].icon,
-                            size: 20,
-                            color: i == index ? palette.accent : palette.dim,
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            tabs[i].label,
-                            style: mono(
-                              context,
-                              size: 9,
-                              weight: FontWeight.w600,
-                              color: i == index ? palette.accent : palette.dim,
-                              letterSpacing: 2.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  ],
                 ),
-            ],
+              );
+            },
           ),
         ),
       ),

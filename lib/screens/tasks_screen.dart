@@ -11,7 +11,10 @@ import '../widgets/task_sheet.dart';
 import '../widgets/terminal_card.dart';
 
 /// The real task list — local, offline-first. Add, edit, complete or delete;
-/// everything is stored on this device (sync arrives in Phase 3).
+/// synced to the private GitHub data repo like everything else.
+///
+/// Wide screens (fold inner display): open tasks on the left, done on the
+/// right — instead of one very long column.
 class TasksScreen extends StatelessWidget {
   const TasksScreen({super.key});
 
@@ -46,6 +49,106 @@ class TasksScreen extends StatelessWidget {
     final store = context.watch<TasksStore>();
     final openTasks = store.openTasks;
     final doneTasks = store.doneTasks;
+    final wide = MediaQuery.sizeOf(context).width >= 700;
+
+    final header = Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          '// TASKS',
+          style: mono(context, size: 22, weight: FontWeight.w700, color: p.accent, letterSpacing: 5),
+        ),
+        const Spacer(),
+        if (doneTasks.isNotEmpty)
+          InkWell(
+            onTap: () => _confirmClearDone(context, store),
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              child: Text(
+                '[ clear done ]',
+                style: mono(context, size: 10, weight: FontWeight.w600, color: p.bad, letterSpacing: 0.6),
+              ),
+            ),
+          ),
+      ],
+    );
+
+    final stats = Row(
+      children: [
+        Text('${store.openCount} open', style: mono(context, size: 10, color: p.dim)),
+        Text(' · ', style: mono(context, size: 10, color: p.dim)),
+        Text(
+          '${store.dueTodayCount} due today',
+          style: mono(context, size: 10, color: store.dueTodayCount > 0 ? p.warn : p.dim),
+        ),
+        Text(' · ', style: mono(context, size: 10, color: p.dim)),
+        Text(
+          '${store.overdueCount} overdue',
+          style: mono(context, size: 10, color: store.overdueCount > 0 ? p.bad : p.dim),
+        ),
+      ],
+    );
+
+    final openBlock = [
+      if (openTasks.isEmpty) ...[
+        const SizedBox(height: 26),
+        Text('> slate clear.', style: mono(context, size: 15, weight: FontWeight.w600, color: p.accent), textAlign: TextAlign.center),
+        const SizedBox(height: 6),
+        Text('no open tasks — the day is yours', style: TextStyle(color: p.dim, fontSize: 12), textAlign: TextAlign.center),
+        const SizedBox(height: 18),
+      ] else
+        TerminalCard(
+          palette: p,
+          children: [
+            for (var i = 0; i < openTasks.length; i++) ...[
+              if (i > 0) TerminalCardRule(palette: p),
+              TaskRow(
+                palette: p,
+                task: openTasks[i],
+                onToggle: () => store.toggleDone(openTasks[i].id),
+                onOpen: () => showTaskSheet(context, initial: openTasks[i]),
+              ),
+            ],
+          ],
+        ),
+      const SizedBox(height: 12),
+      _AddTaskButton(palette: p),
+    ];
+
+    final doneBlock = [
+      SectionHeader(palette: p, title: 'DONE · ${doneTasks.length}', trailing: 'tap to revive'),
+      const SizedBox(height: 8),
+      if (doneTasks.isEmpty)
+        TerminalCard(
+          palette: p,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Text(
+                '> nothing completed yet.',
+                textAlign: TextAlign.center,
+                style: mono(context, size: 10.5, color: p.dim),
+              ),
+            ),
+          ],
+        )
+      else
+        TerminalCard(
+          palette: p,
+          children: [
+            for (var i = 0; i < doneTasks.length; i++) ...[
+              if (i > 0) TerminalCardRule(palette: p),
+              TaskRow(
+                palette: p,
+                task: doneTasks[i],
+                onToggle: () => store.toggleDone(doneTasks[i].id),
+                onOpen: () => showTaskSheet(context, initial: doneTasks[i]),
+              ),
+            ],
+          ],
+        ),
+    ];
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
@@ -57,101 +160,34 @@ class TasksScreen extends StatelessWidget {
             onDismiss: store.clearRecoveryNotice,
           ),
         const SizedBox(height: 6),
-
-        // header
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              '// TASKS',
-              style: mono(context, size: 22, weight: FontWeight.w700, color: p.accent, letterSpacing: 5),
-            ),
-            const Spacer(),
-            if (doneTasks.isNotEmpty)
-              InkWell(
-                onTap: () => _confirmClearDone(context, store),
-                borderRadius: BorderRadius.circular(6),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                  child: Text(
-                    '[ clear done ]',
-                    style: mono(context, size: 10, weight: FontWeight.w600, color: p.bad, letterSpacing: 0.6),
-                  ),
-                ),
-              ),
-          ],
-        ),
+        header,
         const SizedBox(height: 4),
-        Row(
-          children: [
-            Text(
-              '${store.openCount} open',
-              style: mono(context, size: 10, color: p.dim),
-            ),
-            Text(' · ', style: mono(context, size: 10, color: p.dim)),
-            Text(
-              '${store.dueTodayCount} due today',
-              style: mono(context, size: 10, color: store.dueTodayCount > 0 ? p.warn : p.dim),
-            ),
-            Text(' · ', style: mono(context, size: 10, color: p.dim)),
-            Text(
-              '${store.overdueCount} overdue',
-              style: mono(context, size: 10, color: store.overdueCount > 0 ? p.bad : p.dim),
-            ),
-          ],
-        ),
+        stats,
         const SizedBox(height: 14),
-
-        // open tasks
-        if (openTasks.isEmpty) ...[
-          const SizedBox(height: 26),
-          Text('> slate clear.', style: mono(context, size: 15, weight: FontWeight.w600, color: p.accent), textAlign: TextAlign.center),
-          const SizedBox(height: 6),
-          Text('no open tasks — the day is yours', style: TextStyle(color: p.dim, fontSize: 12), textAlign: TextAlign.center),
-          const SizedBox(height: 18),
+        if (!wide) ...[
+          ...openBlock,
+          if (doneTasks.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            ...doneBlock,
+          ],
         ] else
-          TerminalCard(
-            palette: p,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (var i = 0; i < openTasks.length; i++) ...[
-                if (i > 0) TerminalCardRule(palette: p),
-                TaskRow(
-                  palette: p,
-                  task: openTasks[i],
-                  onToggle: () => store.toggleDone(openTasks[i].id),
-                  onOpen: () => showTaskSheet(context, initial: openTasks[i]),
-                ),
-              ],
+              Expanded(
+                flex: 7,
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: openBlock),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                flex: 6,
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: doneBlock),
+              ),
             ],
           ),
-
-        const SizedBox(height: 12),
-        _AddTaskButton(palette: p),
-
-        // done tasks
-        if (doneTasks.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          SectionHeader(palette: p, title: 'DONE · ${doneTasks.length}', trailing: 'tap to revive'),
-          const SizedBox(height: 8),
-          TerminalCard(
-            palette: p,
-            children: [
-              for (var i = 0; i < doneTasks.length; i++) ...[
-                if (i > 0) TerminalCardRule(palette: p),
-                TaskRow(
-                  palette: p,
-                  task: doneTasks[i],
-                  onToggle: () => store.toggleDone(doneTasks[i].id),
-                  onOpen: () => showTaskSheet(context, initial: doneTasks[i]),
-                ),
-              ],
-            ],
-          ),
-        ],
-
         const SizedBox(height: 12),
         Text(
-          'stored on this device · syncs in Phase 3',
+          'stored locally · synced to your private GitHub repo',
           textAlign: TextAlign.center,
           style: mono(context, size: 9, color: p.dim.withValues(alpha: 0.75), letterSpacing: 0.6),
         ),

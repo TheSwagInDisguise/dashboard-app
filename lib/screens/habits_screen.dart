@@ -68,7 +68,44 @@ class HabitsScreen extends StatelessWidget {
                 ),
               ],
             )
-          else
+          else if (MediaQuery.sizeOf(context).width >= 700) ...[
+            // Wide screens: two-column card grid instead of one long list.
+            Builder(
+              builder: (context) {
+                final width = MediaQuery.sizeOf(context).width;
+                final cardWidth = (width - 28 - 12) / 2;
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final habit in habits)
+                      SizedBox(
+                        width: cardWidth,
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                          decoration: BoxDecoration(
+                            color: p.panel,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: p.border),
+                          ),
+                          child: _HabitCardRow(
+                            palette: p,
+                            habit: habit,
+                            doneToday: store.doneToday(habit.id),
+                            streak: store.currentStreak(habit),
+                            weekDots: store.thisWeekDots(habit),
+                            onToggle: () => store.toggleOn(habit.id),
+                            onEdit: () => _showHabitSheet(context, initial: habit),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            _AddHabitButton(palette: p, label: '+ ADD HABIT', small: true),
+          ] else
             TerminalCard(
               palette: p,
               children: [

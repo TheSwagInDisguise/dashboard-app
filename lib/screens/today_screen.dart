@@ -61,6 +61,139 @@ class TodayScreen extends StatelessWidget {
           ),
           const SizedBox(height: 14),
 
+          // ---------- two-pane on fold / tablet / wide screens ----------
+          if (MediaQuery.sizeOf(context).width >= 700)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 7,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                                // ---------- CALENDAR (live) ----------
+                                SectionHeader(palette: p, title: 'CALENDAR', trailing: _calendarTrailing(feed)),
+                                const SizedBox(height: 8),
+                                TerminalCard(
+                                  palette: p,
+                                  children: _buildCalendarRows(context, p, events, feed, now),
+                                ),
+                                if (_calendarNotes(feed).isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  for (final note in _calendarNotes(feed))
+                                    Text('· $note', style: mono(context, size: 8.5, color: p.dim)),
+                                ],
+                                const SizedBox(height: 14),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  flex: 6,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                                // ---------- TASKS (live) ----------
+                                SectionHeader(palette: p, title: 'TASKS', trailing: '${store.openCount} open'),
+                                const SizedBox(height: 8),
+                                TerminalCard(
+                                  palette: p,
+                                  children: [
+                                    if (store.openTasks.isEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 4),
+                                        child: Text(
+                                          '> no open tasks — slate clear.',
+                                          textAlign: TextAlign.center,
+                                          style: mono(context, size: 11, color: p.dim),
+                                        ),
+                                      )
+                                    else ...[
+                                      for (final task in store.openTasks.take(4)) ...[
+                                        if (task != store.openTasks.take(4).first) TerminalCardRule(palette: p),
+                                        TaskRow(
+                                          palette: p,
+                                          task: task,
+                                          onToggle: () => store.toggleDone(task.id),
+                                          onOpen: () => showTaskSheet(context, initial: task),
+                                        ),
+                                      ],
+                                      if (store.openTasks.length > 4)
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 6),
+                                          child: Text(
+                                            '+ ${store.openTasks.length - 4} more in TASKS →',
+                                            textAlign: TextAlign.center,
+                                            style: mono(context, size: 9.5, color: p.dim),
+                                          ),
+                                        ),
+                                    ],
+                                    const SizedBox(height: 6),
+                                    _AddTaskGhostRow(palette: p),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+                      const SizedBox(height: 14),
+                                // ---------- HABITS (live) ----------
+                                SectionHeader(
+                                  palette: p,
+                                  title: 'HABITS',
+                                  trailing: habits.habits.isEmpty ? 'none yet' : '${habits.habits.where((h) => habits.doneToday(h.id)).length}/${habits.habits.length} today',
+                                ),
+                                const SizedBox(height: 8),
+                                TerminalCard(
+                                  palette: p,
+                                  children: habits.habits.isEmpty
+                                      ? [
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(vertical: 4),
+                                            child: Column(
+                                              children: [
+                                                Text(
+                                                  '> no habits yet — streaks start with one tiny daily thing.',
+                                                  textAlign: TextAlign.center,
+                                                  style: mono(context, size: 10.5, color: p.dim),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  'add your first habit in the HABITS tab →',
+                                                  textAlign: TextAlign.center,
+                                                  style: mono(context, size: 10.5, weight: FontWeight.w600, color: p.accent),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ]
+                                      : [
+                                          for (final habit in habits.habits.take(4)) ...[
+                                            if (habit != habits.habits.take(4).first) TerminalCardRule(palette: p),
+                                            _HabitRow(
+                                              palette: p,
+                                              habit: habit,
+                                              doneToday: habits.doneToday(habit.id),
+                                              streak: habits.currentStreak(habit),
+                                              onToggle: () => habits.toggleOn(habit.id),
+                                            ),
+                                          ],
+                                          if (habits.habits.length > 4)
+                                            Padding(
+                                              padding: const EdgeInsets.only(top: 6),
+                                              child: Text(
+                                                '+ ${habits.habits.length - 4} more in HABITS →',
+                                                textAlign: TextAlign.center,
+                                                style: mono(context, size: 9.5, color: p.dim),
+                                              ),
+                                            ),
+                                        ],
+                                ),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          else ...[
           // ---------- CALENDAR (live) ----------
           SectionHeader(palette: p, title: 'CALENDAR', trailing: _calendarTrailing(feed)),
           const SizedBox(height: 8),
@@ -74,7 +207,6 @@ class TodayScreen extends StatelessWidget {
               Text('· $note', style: mono(context, size: 8.5, color: p.dim)),
           ],
           const SizedBox(height: 14),
-
           // ---------- TASKS (live) ----------
           SectionHeader(palette: p, title: 'TASKS', trailing: '${store.openCount} open'),
           const SizedBox(height: 8),
@@ -115,7 +247,6 @@ class TodayScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-
           // ---------- HABITS (live) ----------
           SectionHeader(
             palette: p,
@@ -168,6 +299,7 @@ class TodayScreen extends StatelessWidget {
                       ),
                   ],
           ),
+          ],
           const SizedBox(height: 12),
 
           Text(
