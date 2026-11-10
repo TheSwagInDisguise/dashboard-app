@@ -5,7 +5,7 @@
     "display": "standalone",
     "background_color": "#0f1117",
     "theme_color": "#0f1117",
-    "description": "DayDeck — a terminal-styled daily dashboard (Android + web)",
+    "description": "DayDeck \u2014 a terminal-styled daily dashboard (Android + web)",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
@@ -31,5 +31,10 @@
             "type": "image/png",
             "purpose": "maskable"
         }
+    ],
+    "id": "/",
+    "categories": [
+        "productivity",
+        "utilities"
     ]
 }

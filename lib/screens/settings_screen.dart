@@ -7,10 +7,12 @@ import 'package:url_launcher/url_launcher.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/palettes.dart';
+import '../version.dart';
+import 'export_backup.dart';
+import 'conflicts_sheet.dart';
 import '../data/calendar_feed.dart';
 import '../sync/sync_service.dart';
 import '../widgets/section_header.dart';
-import '../version.dart';
 
 const String _kRepoUrl = 'https://github.com/TheSwagInDisguise/dashboard-app';
 const String _kReleasesUrl = 'https://github.com/TheSwagInDisguise/dashboard-app/releases';
@@ -252,6 +254,74 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 14),
                     ],
+        // ============ APP LOCK ============
+        SectionHeader(
+          palette: p,
+          title: 'APP LOCK',
+          trailing: kIsWeb ? 'android only' : (app.appLockEnabled ? 'on' : 'off'),
+        ),
+        const SizedBox(height: 8),
+        _Panel(
+          palette: p,
+          child: Row(
+            children: [
+              Icon(Icons.fingerprint, color: app.appLockEnabled ? p.accent : p.dim, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('require fingerprint / face', style: TextStyle(color: p.text, fontSize: 13)),
+                    const SizedBox(height: 2),
+                    Text(
+                      kIsWeb
+                          ? 'available on the Android app'
+                          : 'asked on open and when you come back',
+                      style: mono(context, size: 8.5, color: p.dim),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: app.appLockEnabled,
+                activeThumbColor: p.accent,
+                onChanged: kIsWeb
+                    ? null
+                    : (v) async => app.setAppLockEnabled(v),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        // ============ BACKUP ============
+        SectionHeader(palette: p, title: 'BACKUP', trailing: 'json · share'),
+        const SizedBox(height: 8),
+        _Panel(
+          palette: p,
+          child: Row(
+            children: [
+              Icon(Icons.ios_share, color: p.dim, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('everything, one file', style: TextStyle(color: p.text, fontSize: 13)),
+                    const SizedBox(height: 2),
+                    Text('tasks · events · habits · habit logs', style: mono(context, size: 8.5, color: p.dim)),
+                  ],
+                ),
+              ),
+              _TerminalButton(
+                palette: p,
+                label: 'EXPORT',
+                small: true,
+                onTap: () => exportJsonBackup(context),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
                   ],
                 ),
               ),
@@ -262,6 +332,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     ...[
+
         // ============ EVENING REMINDER ============
         SectionHeader(palette: p, title: 'EVENING REMINDER', trailing: 'live'),
         const SizedBox(height: 8),
@@ -389,6 +460,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 14),
                     ],
                     ...[
+
+
+        // ============ SYNC CONFLICTS ============
+        SectionHeader(palette: p, title: 'SYNC CONFLICTS', trailing: 'parked losers'),
+        const SizedBox(height: 8),
+        _Panel(
+          palette: p,
+          child: Row(
+            children: [
+              Icon(Icons.merge_type, color: p.dim, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('versions that lost a merge', style: TextStyle(color: p.text, fontSize: 13)),
+                    const SizedBox(height: 2),
+                    Text('restore any as a fresh item', style: mono(context, size: 8.5, color: p.dim)),
+                  ],
+                ),
+              ),
+              _TerminalButton(
+                palette: p,
+                label: 'CHECK',
+                small: true,
+                onTap: () => showConflictsSheet(context),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
         // ============ ABOUT ============
         SectionHeader(palette: p, title: 'ABOUT'),
         const SizedBox(height: 8),
@@ -532,6 +634,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 14),
             ],
             ...[
+
+        // ============ APP LOCK ============
+        SectionHeader(
+          palette: p,
+          title: 'APP LOCK',
+          trailing: kIsWeb ? 'android only' : (app.appLockEnabled ? 'on' : 'off'),
+        ),
+        const SizedBox(height: 8),
+        _Panel(
+          palette: p,
+          child: Row(
+            children: [
+              Icon(Icons.fingerprint, color: app.appLockEnabled ? p.accent : p.dim, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('require fingerprint / face', style: TextStyle(color: p.text, fontSize: 13)),
+                    const SizedBox(height: 2),
+                    Text(
+                      kIsWeb
+                          ? 'available on the Android app'
+                          : 'asked on open and when you come back',
+                      style: mono(context, size: 8.5, color: p.dim),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: app.appLockEnabled,
+                activeThumbColor: p.accent,
+                onChanged: kIsWeb
+                    ? null
+                    : (v) async => app.setAppLockEnabled(v),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
         // ============ EVENING REMINDER ============
         SectionHeader(palette: p, title: 'EVENING REMINDER', trailing: 'live'),
         const SizedBox(height: 8),
@@ -659,6 +801,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 14),
             ],
             ...[
+
+        // ============ BACKUP ============
+        SectionHeader(palette: p, title: 'BACKUP', trailing: 'json · share'),
+        const SizedBox(height: 8),
+        _Panel(
+          palette: p,
+          child: Row(
+            children: [
+              Icon(Icons.ios_share, color: p.dim, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('everything, one file', style: TextStyle(color: p.text, fontSize: 13)),
+                    const SizedBox(height: 2),
+                    Text('tasks · events · habits · habit logs', style: mono(context, size: 8.5, color: p.dim)),
+                  ],
+                ),
+              ),
+              _TerminalButton(
+                palette: p,
+                label: 'EXPORT',
+                small: true,
+                onTap: () => exportJsonBackup(context),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // ============ SYNC CONFLICTS ============
+        SectionHeader(palette: p, title: 'SYNC CONFLICTS', trailing: 'parked losers'),
+        const SizedBox(height: 8),
+        _Panel(
+          palette: p,
+          child: Row(
+            children: [
+              Icon(Icons.merge_type, color: p.dim, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('versions that lost a merge', style: TextStyle(color: p.text, fontSize: 13)),
+                    const SizedBox(height: 2),
+                    Text('restore any as a fresh item', style: mono(context, size: 8.5, color: p.dim)),
+                  ],
+                ),
+              ),
+              _TerminalButton(
+                palette: p,
+                label: 'CHECK',
+                small: true,
+                onTap: () => showConflictsSheet(context),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
         // ============ ABOUT ============
         SectionHeader(palette: p, title: 'ABOUT'),
         const SizedBox(height: 8),

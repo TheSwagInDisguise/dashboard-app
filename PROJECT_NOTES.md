@@ -5,7 +5,7 @@ The GitHub repos are the source of truth — workspace snapshots of `/home/user`
 `.git/` directories and executable bits, and exclude hidden dot-folders, so local copies may
 look broken but the pushed repos are never affected.
 
-_Last updated: 2026-11-10 (foldable/Z Fold 5 two-pane layout shipped as v0.7.0)_
+_Last updated: 2026-11-10 (v0.8.0 — AMOLED + task reminders + roadmap features 1–12)_
 
 ---
 
@@ -268,6 +268,71 @@ today view shows live tasks.
 - Widget tests provide all stores + feed (inert without token/URL). **30/30 tests green; analyze clean.**
 - iCal gotcha to know: feed DTSTART without Z and with TZID is read as DEVICE-LOCAL time — correct
   when the phone is in the same zone as the calendar (Australia/Sydney). Wrong otherwise (rare).
+
+## v0.8.0 — AMOLED + task reminders + roadmap 1–12 (2026-11-10)
+
+Owner asked to implement everything on the v0.7.0 roadmap, with emphasis on the **AMOLED
+palette** and **task reminders**. All 12 roadmap items shipped, plus per-task reminders.
+
+- **AMOLED scheme** (#10): pure-black bg (`000000`), panel `0B0B0D`/`121214`, cyan/magenta
+  accents kept, scanlines 0.03. Fifth scheme in APPEARANCE (modern stays default).
+- **Per-task reminders** (owner-emphasised): tasks gain nullable `reminderAt` (UTC instant,
+  JSON key `reminderAt` — additive, sync-safe). Task sheet: set a due date → "reminder"
+  switch + time picker (default 09:00). Fires via a new `daydeck_tasks` channel
+  (high importance), id allocated from a persisted seq map (prefs
+  `task_reminder_map`/`when`/`seq`), reconciled against the store on every change
+  (`ReminderService.syncTaskReminders`) — done/deleted/rescheduled tasks cancel cleanly.
+  Tap → deep link opens the TASKS tab. Legacy tasks without `reminderAt` parse fine.
+- **Evening reminder upgrades** (#9): notification now carries a `SNOOZE 30 MIN` action
+  (one-shot at +30 min, id 2031) and `payload: shared_queue`; tapping opens TODAY and pops
+  the SHARED QUEUE dialog (via `DeepLinks.sharedQueueRequests` + an invisible handler in
+  `today_screen.dart`). Snooze from a background isolate is handled top-level, no plugins.
+- **Home-screen widget** (#1): `home_widget` 0.10.0; native Kotlin
+  `DayDeckWidgetReceiver : HomeWidgetProvider` + `daydeck_widget.xml` (open count, up to 4
+  agenda lines, updated-stamp) backed by a `HomeWidgetPreferences` push from Flutter
+  (`updateDayDeckWidget` — called on first frame + every store change). 30-min system
+  refresh, 4×2 cells. Tap opens the app.
+- **Share → DayDeck** (#2): MainActivity is now a real Kotlin class — ACTION_SEND text/plain
+  intent-filter on the activity; text arrives as `{type:"share",text}` over the
+  `daydeck/input` MethodChannel → creates a task (first 500 chars) + snackbar. Cold-start
+  shares handled via `getInitialInput` (companion `pendingInput`).
+- **One-tap capture routes** (#3 tile + #6 shortcuts): `DayDeckTileService : TileService`
+  (BIND_QUICK_SETTINGS_TILE) → opens the app straight into the new-task sheet. Static
+  shortcuts in `res/xml/shortcuts.xml`: "New task" / "Sync now". All three ride
+  `ACTION_ADD_TASK`/`SYNC_NOW`/`OPEN_TODAY` with explicit component intents — NO new
+  intent-filters, tile/shortcuts not exported beyond the component.
+- **Search** (#4): `lib/screens/search_screen.dart`, opened from a search icon in Today's
+  header. One query matches tasks (open+done), local events, the cached Google feed and
+  habits (title/location/notes). Task hit → edit sheet; habit hit → toggle today; gcal hits
+  marked read-only.
+- **Sync conflicts viewer** (#5): Settings → SYNC CONFLICTS → CHECK reads `conflicts.json`
+  (remote via Contents API + local pending queue, merged/deduped) → bottom sheet lists
+  losers (doc, losing side, local time) with RESTORE-AS-NEW for tasks/events/habits
+  (habit logs intentionally not restored — re-check the habit). Parked entries stay in
+  the repo.
+- **JSON backup export** (#11): Settings → BACKUP → EXPORT. `share_plus` 12 + `path_provider`;
+  `daydeck-backup-YYYYMMDD.json` containing tasks/events/habits/habit_logs (no tokens/iCal
+  URL — ever). Web falls back to sharing the JSON as text.
+- **Weekly completion** (#12): dim line under Today's header — `this week · habits N% ·
+  M tasks done` (habit % = checks this Mon–Sun / 7×daily-habits; tasks = done with
+  updatedAt within 7 days).
+- **Biometric app lock** (#8): `local_auth` 3.0.2; Settings → APP LOCK switch (Android only,
+  biometric + device credential fallback, re-locks on resume after >30 s away, never traps
+  the user when biometrics are unavailable). Widget tests unaffected (default off).
+- **PWA polish** (#7): manifest gains `id` + `categories`, `color-scheme: dark` meta added;
+  icons/maskable/standalone were already in place.
+- main.dart keeps a `tasksStore.addListener → syncTaskReminders` reconcile (also covers
+  sync merges arriving from the other device).
+- **33/33 tests green (3 new for reminderAt); analyze clean; web build rebuilt (port 8090).**
+
+### Kotlin/native gotchas (for the next session)
+- `HomeWidgetProvider` (from the `home_widget` plugin) exposes `onUpdate(... , SharedPreferences)`;
+  preferences live in `HomeWidgetPreferences`. `saveWidgetData` commits synchronously.
+- BottomNavigationBar height-chain lesson from v0.7.0 still applies — widget/tile/shortcut
+  code paths must stay intrinsic; TileService/shortcuts open the activity with
+  `FLAG_ACTIVITY_NEW_TASK | CLEAR_TOP`.
+- share/shortcut/tile inputs all funnel through MainActivity → `daydeck/input` channel
+  (`nativeInput` callback + `getInitialInput` for cold starts) → single router in Shell.
 
 ## Phase 7 — Z Fold 5 inner-display layout — v0.7.0 (2026-11-10)
 

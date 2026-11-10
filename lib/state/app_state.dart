@@ -81,6 +81,17 @@ class AppState extends ChangeNotifier {
     return s;
   }
 
+  // ---- app lock --------------------------------------------------------
+  /// Optional biometric gate on app open / resume (Android only).
+  bool get appLockEnabled => _prefs?.getBool('app_lock') ?? false;
+
+  Future<void> setAppLockEnabled(bool value) async {
+    try {
+      await _prefs?.setBool('app_lock', value);
+    } catch (_) {}
+    notifyListeners();
+  }
+
   // ---- scheme ----------------------------------------------------------
   DayDeckScheme get scheme => _scheme;
   TerminalPalette get palette => paletteOf(_scheme);

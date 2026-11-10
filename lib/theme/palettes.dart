@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 /// The four DayDeck colour schemes. `modern` is the default; `light` is the
 /// accessibility fallback. Schemes are intentionally just colour tokens — no
 /// other design decisions leak in.
-enum DayDeckScheme { modern, classicGreen, amber, light }
+enum DayDeckScheme { modern, classicGreen, amber, light, amoled }
 
 class TerminalPalette {
   const TerminalPalette({
@@ -106,6 +106,24 @@ const Map<DayDeckScheme, TerminalPalette> kPalettes = {
     bad: Color(0xFFFF6B4A),
     brightness: Brightness.dark,
     scanlineAlpha: 0.055,
+  ),
+  DayDeckScheme.amoled: TerminalPalette(
+    scheme: DayDeckScheme.amoled,
+    label: 'amoled',
+    descriptor: 'true black — made for the fold panel',
+    bg: Color(0xFF000000),
+    panel: Color(0xFF0B0B0D),
+    panel2: Color(0xFF121214),
+    border: Color(0xFF222226),
+    text: Color(0xFFE9E9ED),
+    dim: Color(0xFF71717A),
+    accent: Color(0xFF22D3EE),
+    accent2: Color(0xFFE879F9),
+    good: Color(0xFF34D399),
+    warn: Color(0xFFFBBF24),
+    bad: Color(0xFFF87171),
+    brightness: Brightness.dark,
+    scanlineAlpha: 0.03,
   ),
   DayDeckScheme.light: TerminalPalette(
     scheme: DayDeckScheme.light,

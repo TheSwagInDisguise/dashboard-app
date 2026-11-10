@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Static launcher shortcuts (long-press the DayDeck icon). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_task"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_new_task"
+        android:shortcutLongLabel="@string/shortcut_new_task_long">
+        <intent
+            android:action="io.github.theswagindisguise.daydeck.ADD_TASK"
+            android:targetPackage="io.github.theswagindisguise.daydeck"
+            android:targetClass="io.github.theswagindisguise.daydeck.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="sync_now"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_sync"
+        android:shortcutLongLabel="@string/shortcut_sync_long">
+        <intent
+            android:action="io.github.theswagindisguise.daydeck.SYNC_NOW"
+            android:targetPackage="io.github.theswagindisguise.daydeck"
+            android:targetClass="io.github.theswagindisguise.daydeck.MainActivity" />
+    </shortcut>
+</shortcuts>

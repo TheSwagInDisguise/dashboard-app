@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_description">Open tasks and today&#8217;s agenda at a glance.</string>
+    <string name="shortcut_new_task">New task</string>
+    <string name="shortcut_new_task_long">Add a new task</string>
+    <string name="shortcut_sync">Sync now</string>
+    <string name="shortcut_sync_long">Sync tasks, events and habits</string>
+    <string name="tile_label">DayDeck: add task</string>
+</resources>

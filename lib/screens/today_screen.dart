@@ -14,6 +14,8 @@ import '../sync/sync_service.dart';
 import '../widgets/event_sheet.dart';
 import '../theme/app_theme.dart';
 import '../theme/palettes.dart';
+import 'search_screen.dart';
+import '../notifications/deep_links.dart';
 import '../version.dart';
 import '../widgets/blinking_cursor.dart';
 import '../widgets/section_header.dart';
@@ -52,14 +54,18 @@ class TodayScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _StatusStrip(palette: p, count: store.openCount),
+          const _SharedQueueDeepLinkHandler(),
           const SizedBox(height: 10),
           _HeaderRow(
             palette: p,
+            onSearch: () => showDayDeckSearch(context),
             dateLine:
                 '${_weekdays[now.weekday - 1]} ${now.day.toString().padLeft(2, '0')} ${_months[now.month - 1]} ${now.year}',
             metaLine: 'week ${week.clamp(1, 53)} · day $dayOfYear',
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 6),
+          _WeekStrip(palette: p, habits: context.watch<HabitStore>(), tasks: store),
+          const SizedBox(height: 12),
 
           // ---------- two-pane on fold / tablet / wide screens ----------
           if (MediaQuery.sizeOf(context).width >= 700)
@@ -517,11 +523,12 @@ class _LiveClockState extends State<_LiveClock> {
 }
 
 class _HeaderRow extends StatelessWidget {
-  const _HeaderRow({required this.palette, required this.dateLine, required this.metaLine});
+  const _HeaderRow({required this.palette, required this.dateLine, required this.metaLine, required this.onSearch});
 
   final TerminalPalette palette;
   final String dateLine;
   final String metaLine;
+  final VoidCallback onSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -538,15 +545,61 @@ class _HeaderRow extends StatelessWidget {
             BlinkingCursor(color: palette.accent),
           ],
         ),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(dateLine, style: mono(context, size: 11, weight: FontWeight.w600, color: palette.accent2)),
-            const SizedBox(height: 2),
-            Text(metaLine, style: mono(context, size: 10, color: palette.dim)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(dateLine, style: mono(context, size: 11, weight: FontWeight.w600, color: palette.accent2)),
+                const SizedBox(height: 2),
+                Text(metaLine, style: mono(context, size: 10, color: palette.dim)),
+              ],
+            ),
+            const SizedBox(width: 10),
+            IconButton(
+              icon: Icon(Icons.search, color: palette.dim, size: 20),
+              tooltip: 'search',
+              onPressed: onSearch,
+              padding: const EdgeInsets.all(6),
+              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+            ),
           ],
         ),
       ],
+    );
+  }
+}
+
+/// One dim line: this week's habit hit rate + tasks completed in the last 7 days.
+class _WeekStrip extends StatelessWidget {
+  const _WeekStrip({required this.palette, required this.habits, required this.tasks});
+
+  final TerminalPalette palette;
+  final HabitStore habits;
+  final TasksStore tasks;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    final dailyHabits = habits.habits.where((h) => h.cadence == 'daily').toList();
+    int habitChecks = 0;
+    for (final h in dailyHabits) {
+      habitChecks += habits.thisWeekDots(h).where((d) => d).length;
+    }
+    final habitPct = dailyHabits.isEmpty ? null : (habitChecks * 100 / (7 * dailyHabits.length)).round();
+    final weekAgo = DateTime.now().subtract(const Duration(days: 7));
+    final doneThisWeek = tasks.doneTasks.where((t) => t.updatedAt.isAfter(weekAgo)).length;
+
+    final parts = <String>[];
+    if (habitPct != null) parts.add('habits $habitPct%');
+    parts.add('$doneThisWeek task${doneThisWeek == 1 ? '' : 's'} done');
+
+    return Center(
+      child: Text(
+        'this week · ${parts.join(' · ')}',
+        style: mono(context, size: 9, color: p.dim.withValues(alpha: 0.85), letterSpacing: 0.5),
+      ),
     );
   }
 }
@@ -666,48 +719,7 @@ class _SharedQueueRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () => showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text('SHARED QUEUE · ${pending.length}'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final event in pending)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${event.title}  ·  ${event.start.toLocal().day.toString().padLeft(2, '0')}/${event.start.toLocal().month.toString().padLeft(2, '0')}',
-                            style: TextStyle(color: palette.text, fontSize: 12),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () async {
-                            await eventStore.toggleDone(event.id);
-                            if (ctx.mounted && Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
-                          },
-                          child: Text('IN GCAL ✓', style: mono(context, size: 9.5, weight: FontWeight.w700, color: palette.good)),
-                        ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 6),
-                Text(
-                  'anything marked here (or spotted in the Google feed automatically) disappears from your day.',
-                  style: TextStyle(color: palette.dim, fontSize: 9.5, height: 1.5),
-                ),
-              ],
-            ),
-          ),
-          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('close'))],
-        ),
-      ),
+      onTap: () => showSharedQueueDialog(context, pending, eventStore),
       borderRadius: BorderRadius.circular(8),
       child: Row(
         children: [
@@ -861,4 +873,101 @@ class _AddTaskGhostRow extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// Tap-to-open dialog listing SHARED events parked on other days.
+/// Used by the queue row and by the evening notification deep link.
+Future<void> showSharedQueueDialog(BuildContext context, List<Event> pending, EventStore eventStore) {
+  final p = context.read<AppState>().palette;
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text('SHARED QUEUE · ${pending.length}'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final event in pending)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${event.title}  ·  ${event.start.toLocal().day.toString().padLeft(2, '0')}/${event.start.toLocal().month.toString().padLeft(2, '0')}',
+                        style: TextStyle(color: p.text, fontSize: 12),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        await eventStore.toggleDone(event.id);
+                        if (ctx.mounted && Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
+                      },
+                      child: Text('IN GCAL ✓', style: mono(ctx, size: 9.5, weight: FontWeight.w700, color: p.good)),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 6),
+            Text(
+              'anything marked here (or spotted in the Google feed automatically) disappears from your day.',
+              style: TextStyle(color: p.dim, fontSize: 9.5, height: 1.5),
+            ),
+          ],
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('close'))],
+    ),
+  );
+}
+
+/// Fires the SHARED QUEUE dialog when a deep link asks for it (evening
+/// notification tap). Invisible; lives inside the Today screen.
+class _SharedQueueDeepLinkHandler extends StatefulWidget {
+  const _SharedQueueDeepLinkHandler();
+
+  @override
+  State<_SharedQueueDeepLinkHandler> createState() => _SharedQueueDeepLinkHandlerState();
+}
+
+class _SharedQueueDeepLinkHandlerState extends State<_SharedQueueDeepLinkHandler> {
+  int _seen = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _seen = DeepLinks.sharedQueueRequests.value;
+    DeepLinks.sharedQueueRequests.addListener(_maybeOpen);
+    if (_seen > 0) _maybeOpen(); // requested before this screen mounted
+  }
+
+  @override
+  void dispose() {
+    DeepLinks.sharedQueueRequests.removeListener(_maybeOpen);
+    super.dispose();
+  }
+
+  void _maybeOpen() {
+    final requested = DeepLinks.sharedQueueRequests.value;
+    if (requested == _seen) return;
+    _seen = requested;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final store = context.read<EventStore>();
+      final now = DateTime.now();
+      final pending = store
+          .sharedPending()
+          .where((e) => !_isSameDay(e.start.toLocal(), now))
+          .toList();
+      if (pending.isNotEmpty) {
+        unawaited(showSharedQueueDialog(context, pending, store));
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }

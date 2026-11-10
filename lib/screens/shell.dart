@@ -1,11 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:provider/provider.dart';
 
+import '../home_widget_bridge.dart';
+import '../notifications/deep_links.dart';
 import '../state/app_state.dart';
+import '../state/tasks_store.dart';
 import '../theme/app_theme.dart';
 import '../theme/palettes.dart';
 import '../sync/sync_service.dart';
 import '../widgets/scanlines.dart';
+import '../widgets/task_sheet.dart';
 import 'habits_screen.dart';
 import 'settings_screen.dart';
 import 'tasks_screen.dart';
@@ -74,8 +82,13 @@ class _TokenExpiredBanner extends StatelessWidget {
 /// inner ≈ 800+; phones sit below 700).
 const double _kWideBreakpoint = 700;
 
-class _ShellState extends State<Shell> {
+class _ShellState extends State<Shell> with WidgetsBindingObserver {
   int _index = 0;
+  bool _locked = false;
+  bool _authenticating = false;
+  DateTime? _pausedAt;
+
+  static const _channel = MethodChannel('daydeck/input');
 
   static const _tabs = [
     (icon: Icons.today_outlined, label: 'TODAY'),
@@ -85,12 +98,161 @@ class _ShellState extends State<Shell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    DeepLinks.tasksRequests.addListener(_onTasksDeepLink);
+    DeepLinks.sharedQueueRequests.addListener(_onSharedQueueDeepLink);
+    _channel.setMethodCallHandler(_onNativeCall);
+    final store = context.read<TasksStore>();
+    store.addListener(_onTasksStoreChanged);
+    final appState = context.read<AppState>();
+    _locked = appState.appLockEnabled;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_fetchInitialInput());
+      unawaited(updateDayDeckWidget(context.read<TasksStore>()));
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    DeepLinks.tasksRequests.removeListener(_onTasksDeepLink);
+    DeepLinks.sharedQueueRequests.removeListener(_onSharedQueueDeepLink);
+    _channel.setMethodCallHandler(null);
+    try {
+      context.read<TasksStore>().removeListener(_onTasksStoreChanged);
+    } catch (_) {}
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _pausedAt = DateTime.now();
+    } else if (state == AppLifecycleState.resumed) {
+      final away = _pausedAt == null ? Duration.zero : DateTime.now().difference(_pausedAt!);
+      _pausedAt = null;
+      final enabled = context.read<AppState>().appLockEnabled;
+      if (enabled && !_locked && away > const Duration(seconds: 30)) {
+        setState(() => _locked = true);
+        unawaited(_authenticate());
+      }
+    }
+  }
+
+  // ---------------- biometric lock ----------------
+
+  Future<void> _authenticate() async {
+    if (_authenticating) return;
+    _authenticating = true;
+    try {
+      final auth = LocalAuthentication();
+      bool canAuth;
+      try {
+        canAuth = await auth.isDeviceSupported();
+      } catch (_) {
+        canAuth = false;
+      }
+      if (!canAuth) {
+        // No biometrics / device credential set up — never trap the user.
+        if (mounted) setState(() => _locked = false);
+        return;
+      }
+      final ok = await auth.authenticate(
+        localizedReason: 'unlock daydeck',
+        persistAcrossBackgrounding: true,
+      );
+      if (ok && mounted) setState(() => _locked = false);
+    } catch (_) {
+      // Stay locked; the unlock button retries.
+    } finally {
+      _authenticating = false;
+    }
+  }
+
+  // ---------------- native input (share / tile / shortcuts) ----------------
+
+  Future<dynamic> _onNativeCall(MethodCall call) async {
+    if (call.method == 'nativeInput') _routeInput(call.arguments);
+    return null;
+  }
+
+  Future<void> _fetchInitialInput() async {
+    try {
+      final input = await _channel.invokeMethod<dynamic>('getInitialInput');
+      _routeInput(input);
+    } catch (_) {}
+  }
+
+  void _routeInput(dynamic input) {
+    if (!mounted || input is! Map) return;
+    switch (input['type']?.toString()) {
+      case 'share':
+        _handleShare(input['text']);
+      case 'add_task':
+        _goTasksAndAdd();
+      case 'sync_now':
+        _syncNow();
+      case 'open_today':
+        setState(() => _index = 0);
+    }
+  }
+
+  Future<void> _handleShare(dynamic text) async {
+    final raw = (text ?? '').toString().trim();
+    if (raw.isEmpty) return;
+    final title = raw.length > 500 ? raw.substring(0, 500) : raw;
+    await context.read<TasksStore>().add(title: title, priority: 'P2');
+    if (!mounted) return;
+    setState(() => _index = 1);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('captured from share sheet as a task')),
+    );
+  }
+
+  void _goTasksAndAdd() {
+    setState(() => _index = 1);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(showTaskSheet(context));
+    });
+  }
+
+  Future<void> _syncNow() async {
+    await context.read<SyncService>().syncNow();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('syncing…')),
+    );
+  }
+
+  // ---------------- deep links from notifications ----------------
+
+  void _onTasksDeepLink() {
+    if (mounted) setState(() => _index = 1);
+  }
+
+  void _onSharedQueueDeepLink() {
+    if (mounted) setState(() => _index = 0);
+  }
+
+  // ---------------- home-screen widget ----------------
+
+  void _onTasksStoreChanged() {
+    unawaited(updateDayDeckWidget(context.read<TasksStore>()));
+  }
+
+  @override
   Widget build(BuildContext context) {
     final palette = context.watch<AppState>().palette;
     final sync = context.watch<SyncService>();
 
+    if (_locked) {
+      return _LockScreen(palette: palette, onUnlock: _authenticate);
+    }
+
     return Scaffold(
-      backgroundColor: palette.bg,
+     backgroundColor: palette.bg,
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -211,6 +373,54 @@ class _TerminalTabBar extends StatelessWidget {
               );
             },
           ),
+        ),
+      ),
+    );
+  }
+}
+
+
+/// Full-screen gate shown when biometric app lock is enabled and not yet
+/// authenticated this session/resume. Only rendered on Android; the web
+/// build never enables it.
+class _LockScreen extends StatelessWidget {
+  const _LockScreen({required this.palette, required this.onUnlock});
+
+  final TerminalPalette palette;
+  final VoidCallback onUnlock;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    return Scaffold(
+      backgroundColor: p.bg,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.lock_outline, size: 54, color: p.accent),
+            const SizedBox(height: 18),
+            Text(
+              'daydeck · locked',
+              style: mono(context, size: 13, weight: FontWeight.w700, color: p.accent, letterSpacing: 3),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'biometrics required to see your day',
+              style: TextStyle(color: p.dim, fontSize: 11),
+            ),
+            const SizedBox(height: 22),
+            OutlinedButton.icon(
+              onPressed: onUnlock,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: p.accent,
+                side: BorderSide(color: p.accent.withValues(alpha: 0.65)),
+                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
+              ),
+              icon: const Icon(Icons.fingerprint),
+              label: Text('UNLOCK', style: mono(context, size: 11, weight: FontWeight.w700, letterSpacing: 2.4)),
+            ),
+          ],
         ),
       ),
     );

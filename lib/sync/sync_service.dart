@@ -343,6 +343,78 @@ class SyncService extends ChangeNotifier {
 
   // ================= conflicts.json =================
 
+  /// Public: everything parked in conflicts.json (local pending + remote).
+  /// Used by Settings → SYNC CONFLICTS. Best-effort: no token → just the
+  /// local pending queue; parse failures → whatever decodes cleanly.
+  Future<List<Map<String, dynamic>>> fetchConflicts() async {
+    final pending = await _loadPendingConflicts();
+    final token = _appState.syncToken;
+    if (token == null || token.isEmpty) return pending;
+    try {
+      final client = GitHubClient(token: token, repo: _repo);
+      final remote = await client.getFile(_conflictsPath);
+      if (!remote.exists || remote.content == null) return pending;
+      final remoteEntries = _decodeConflicts(remote.content!);
+      final seen = <String>{};
+      final merged = <Map<String, dynamic>>[];
+      for (final e in [...remoteEntries, ...pending]) {
+        final key = jsonEncode([e['when'], e['doc'], e['id'], e['side']]);
+        if (seen.add(key)) merged.add(e);
+      }
+      merged.sort((a, b) => (b['when'] ?? '').toString().compareTo((a['when'] ?? '').toString()));
+      return merged;
+    } catch (_) {
+      return pending;
+    }
+  }
+
+  /// Public: re-create a parked LOSING version as a brand-new item on this
+  /// device. Supported docs: tasks.json / events.json / habits.json.
+  /// Returns false if the entry can't be restored (unsupported doc or the
+  /// payload is unusable).
+  Future<bool> restoreConflictAsNew(Map<String, dynamic> conflict) async {
+    try {
+      final item = conflict['item'];
+      if (item is! Map) return false;
+      final map = Map<String, dynamic>.from(item);
+      switch (conflict['doc']?.toString()) {
+        case 'tasks.json':
+          await _tasks.add(
+            title: (map['title'] ?? '').toString(),
+            priority: (map['priority'] ?? 'P2').toString(),
+            dueDate: map['due']?.toString(),
+          );
+          return true;
+        case 'events.json':
+          final start = DateTime.tryParse(map['start']?.toString() ?? '');
+          final end = DateTime.tryParse(map['end']?.toString() ?? '');
+          if (start == null || end == null) return false;
+          await _events.add(
+            title: (map['title'] ?? '').toString(),
+            start: start,
+            end: end,
+            allDay: map['allDay'] == true,
+            visibility: map['visibility']?.toString() ?? 'private',
+            notes: map['notes']?.toString(),
+            location: map['location']?.toString(),
+          );
+          return true;
+        case 'habits.json':
+          final title = (map['title'] ?? '').toString().trim();
+          if (title.isEmpty) return false;
+          await _habits.addHabit(
+            title: title,
+            cadence: (map['cadence'] ?? 'daily').toString(),
+          );
+          return true;
+        default:
+          return false;
+      }
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _recordConflicts<T>(List<MergeLoser<T>> losers, _Doc<T> doc) async {
     final pending = await _loadPendingConflicts();
     final now = DateTime.now().toUtc().toIso8601String();

@@ -35,10 +35,14 @@ Future<void> main() async {
     appState: appState,
   );
 
-  // Evening reminder (local-only notification; web = silent no-op).
+  // Local notifications (evening check + per-task reminders; web = silent no-op).
   final reminder = ReminderService();
   await reminder.init();
   unawaited(reminder.ensurePermission());
+  unawaited(reminder.syncTaskReminders(tasksStore.snapshotItems()));
+  tasksStore.addListener(() {
+    unawaited(reminder.syncTaskReminders(tasksStore.snapshotItems()));
+  });
   var lastReminderMinutes = appState.reminderMinutes;
   appState.addListener(() {
     final minutes = appState.reminderMinutes;

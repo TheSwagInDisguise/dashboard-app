@@ -8,6 +8,7 @@ class Task {
     this.done = false,
     this.priority = 'P2',
     this.dueDate,
+    this.reminderAt,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
@@ -23,6 +24,10 @@ class Task {
   /// 'YYYY-MM-DD' or null (no due date)
   final String? dueDate;
 
+  /// UTC instant for the per-task reminder notification, or null (none).
+  /// Only meaningful while the task is open; done/deleted tasks never fire.
+  final DateTime? reminderAt;
+
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -35,6 +40,8 @@ class Task {
     String? priority,
     String? dueDate,
     bool clearDueDate = false,
+    DateTime? reminderAt,
+    bool clearReminder = false,
     DateTime? updatedAt,
     DateTime? deletedAt,
   }) {
@@ -44,6 +51,7 @@ class Task {
       done: done ?? this.done,
       priority: priority ?? this.priority,
       dueDate: clearDueDate ? null : (dueDate ?? this.dueDate),
+      reminderAt: clearReminder ? null : (reminderAt ?? this.reminderAt),
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -56,6 +64,7 @@ class Task {
         'done': done,
         'priority': priority,
         'due': dueDate,
+        'reminderAt': reminderAt?.toUtc().toIso8601String(),
         'createdAt': createdAt.toUtc().toIso8601String(),
         'updatedAt': updatedAt.toUtc().toIso8601String(),
         'deletedAt': deletedAt?.toUtc().toIso8601String(),
@@ -70,6 +79,9 @@ class Task {
       done: json['done'] == true,
       priority: (json['priority']?.toString() ?? 'P2'),
       dueDate: json['due']?.toString().isNotEmpty == true ? json['due'].toString() : null,
+      reminderAt: json['reminderAt'] == null
+          ? null
+          : DateTime.tryParse(json['reminderAt'].toString())?.toUtc(),
       createdAt: parseTime(json['createdAt']),
       updatedAt: parseTime(json['updatedAt']),
       deletedAt: json['deletedAt'] == null ? null : DateTime.tryParse(json['deletedAt'].toString())?.toUtc(),

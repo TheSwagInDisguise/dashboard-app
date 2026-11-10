@@ -32,6 +32,8 @@ class _TaskSheetState extends State<_TaskSheet> {
   late final TextEditingController _title;
   late String _priority;
   String? _dueDate;
+  bool _remind = false;
+  TimeOfDay _remindTime = const TimeOfDay(hour: 9, minute: 0);
   bool _saving = false;
 
   bool get _isEdit => widget.initial != null;
@@ -42,6 +44,12 @@ class _TaskSheetState extends State<_TaskSheet> {
     _title = TextEditingController(text: widget.initial?.title ?? '');
     _priority = widget.initial?.priority ?? 'P2';
     _dueDate = widget.initial?.dueDate;
+    final reminder = widget.initial?.reminderAt;
+    if (reminder != null) {
+      final local = reminder.toLocal();
+      _remind = true;
+      _remindTime = TimeOfDay(hour: local.hour, minute: local.minute);
+    }
   }
 
   @override
@@ -74,6 +82,12 @@ class _TaskSheetState extends State<_TaskSheet> {
       _snack('give it a title first');
       return;
     }
+    // Reminder = due date at the chosen local time, converted to UTC.
+    DateTime? reminderUtc;
+    final due = parseDateKey(_dueDate);
+    if (_remind && due != null) {
+      reminderUtc = DateTime(due.year, due.month, due.day, _remindTime.hour, _remindTime.minute).toUtc();
+    }
     setState(() => _saving = true);
     final store = context.read<TasksStore>();
     if (_isEdit) {
@@ -83,9 +97,11 @@ class _TaskSheetState extends State<_TaskSheet> {
         priority: _priority,
         dueDate: _dueDate,
         clearDueDate: _dueDate == null,
+        reminderAt: reminderUtc,
+        clearReminder: _remind == false,
       );
     } else {
-      await store.add(title: title, priority: _priority, dueDate: _dueDate);
+      await store.add(title: title, priority: _priority, dueDate: _dueDate, reminderAt: reminderUtc);
     }
     if (mounted) Navigator.of(context).pop();
   }
@@ -185,7 +201,7 @@ class _TaskSheetState extends State<_TaskSheet> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    _DueOption(palette: p, label: 'none', selected: _dueDate == null, onTap: () => setState(() => _dueDate = null)),
+                    _DueOption(palette: p, label: 'none', selected: _dueDate == null, onTap: () => setState(() { _dueDate = null; _remind = false; })),
                     _DueOption(
                       palette: p,
                       label: 'today',
@@ -215,6 +231,50 @@ class _TaskSheetState extends State<_TaskSheet> {
                     style: mono(context, size: 10, color: p.accent),
                   ),
                 ],
+                const SizedBox(height: 12),
+
+                // ---- reminder ----
+                Text('reminder', style: mono(context, size: 9.5, color: p.dim, letterSpacing: 1.6)),
+                const SizedBox(height: 6),
+                if (_dueDate == null)
+                  Text('set a due date first', style: mono(context, size: 9, color: p.dim))
+                else
+                  Row(
+                    children: [
+                      Switch(
+                        value: _remind,
+                        activeThumbColor: p.accent,
+                        onChanged: (v) => setState(() => _remind = v),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _remind ? 'remind me at' : 'no reminder',
+                          style: TextStyle(color: p.text, fontSize: 12),
+                        ),
+                      ),
+                      if (_remind)
+                        OutlinedButton(
+                          onPressed: () async {
+                            final picked = await showTimePicker(
+                              context: context,
+                              initialTime: _remindTime,
+                              helpText: 'reminder time',
+                            );
+                            if (picked != null) setState(() => _remindTime = picked);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: p.accent,
+                            side: BorderSide(color: p.accent.withValues(alpha: 0.6)),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          ),
+                          child: Text(
+                            '${_remindTime.hour.toString().padLeft(2, '0')}:${_remindTime.minute.toString().padLeft(2, '0')}',
+                            style: mono(context, size: 12, weight: FontWeight.w700, letterSpacing: 1.5),
+                          ),
+                        ),
+                    ],
+                  ),
                 const SizedBox(height: 16),
 
                 Row(

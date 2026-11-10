@@ -148,7 +148,7 @@ class TasksStore extends ChangeNotifier {
 
   // ---------------- mutations ----------------
 
-  Future<Task> add({required String title, String priority = 'P2', String? dueDate}) async {
+  Future<Task> add({required String title, String priority = 'P2', String? dueDate, DateTime? reminderAt}) async {
     final trimmed = title.trim();
     final now = DateTime.now().toUtc();
     final task = Task(
@@ -156,6 +156,7 @@ class TasksStore extends ChangeNotifier {
       title: trimmed,
       priority: _sanitisePriority(priority),
       dueDate: dueDate,
+      reminderAt: reminderAt,
       createdAt: now,
       updatedAt: now,
     );
@@ -171,6 +172,8 @@ class TasksStore extends ChangeNotifier {
     String? priority,
     String? dueDate,
     bool clearDueDate = false,
+    DateTime? reminderAt,
+    bool clearReminder = false,
   }) async {
     final index = _items.indexWhere((t) => t.id == id);
     if (index < 0) return;
@@ -180,6 +183,8 @@ class TasksStore extends ChangeNotifier {
       priority: priority == null ? null : _sanitisePriority(priority),
       dueDate: dueDate,
       clearDueDate: clearDueDate,
+      reminderAt: reminderAt,
+      clearReminder: clearReminder,
       updatedAt: DateTime.now().toUtc(),
     );
     await _persist();

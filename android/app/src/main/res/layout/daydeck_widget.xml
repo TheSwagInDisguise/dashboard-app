@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home-screen widget: quick glance at the day without opening the app.
+     RemoteViews supports a small view set — keep it to LinearLayout/TextView. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/daydeck_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="@drawable/widget_bg">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="daydeck"
+            android:textColor="#22D3EE"
+            android:textStyle="bold"
+            android:fontFamily="monospace"
+            android:textSize="11sp"
+            android:letterSpacing="0.25" />
+        <TextView
+            android:id="@+id/widget_open_count"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="end"
+            android:textColor="#E9E9ED"
+            android:fontFamily="monospace"
+            android:textSize="11sp"
+            android:text="… open" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="6dp"
+        android:background="#222226" />
+
+    <TextView
+        android:id="@+id/widget_agenda"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:maxLines="4"
+        android:ellipsize="end"
+        android:textColor="#E9E9ED"
+        android:textSize="12sp"
+        android:lineSpacingExtra="2dp"
+        android:text="loading…" />
+
+    <TextView
+        android:id="@+id/widget_footer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#71717A"
+        android:fontFamily="monospace"
+        android:textSize="9sp"
+        android:text="tap to open" />
+</LinearLayout>
