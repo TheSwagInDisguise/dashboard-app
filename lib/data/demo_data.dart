@@ -1,5 +1,7 @@
-// Static sample content for the Phase 1 build. Everything here is replaced
-// by real on-device data in Phases 2–6 (tasks, sync, calendar, habits).
+// Static sample content for screens whose real data lands later
+// (calendar in Phase 4, habits in Phase 6). Tasks are already live —
+// see lib/state/tasks_store.dart.
+//
 // The sample rows intentionally include one "shared, pending sync" event so
 // the queue behaviour is visible in previews.
 
@@ -41,7 +43,7 @@ const List<DemoEvent> kDemoEvents = [
     end: '18:30',
     title: "Dinner — Nonna's",
     source: DemoEventSource.sharedPending,
-    caption: "queued for Google Calendar — not sent yet",
+    caption: 'queued for Google Calendar — not sent yet',
   ),
   DemoEvent(
     start: '20:00',
@@ -49,50 +51,6 @@ const List<DemoEvent> kDemoEvents = [
     title: 'Read before bed',
     source: DemoEventSource.local,
     caption: 'private — stays in the app',
-  ),
-];
-
-enum DemoDueKind { overdue, today, done }
-
-class DemoTask {
-  const DemoTask({
-    required this.title,
-    required this.done,
-    required this.priority,
-    required this.dueLabel,
-    required this.dueKind,
-  });
-
-  final String title;
-  final bool done;
-
-  /// 'P1' (high) · 'P2' (normal) · 'P3' (low)
-  final String priority;
-  final String dueLabel;
-  final DemoDueKind dueKind;
-}
-
-const List<DemoTask> kDemoTasks = [
-  DemoTask(
-    title: 'Call accountant about BAS',
-    done: true,
-    priority: 'P2',
-    dueLabel: 'due today',
-    dueKind: DemoDueKind.done,
-  ),
-  DemoTask(
-    title: 'Buy oat milk',
-    done: false,
-    priority: 'P2',
-    dueLabel: 'due today',
-    dueKind: DemoDueKind.today,
-  ),
-  DemoTask(
-    title: 'Renew car rego',
-    done: false,
-    priority: 'P1',
-    dueLabel: 'overdue · +2d',
-    dueKind: DemoDueKind.overdue,
   ),
 ];
 

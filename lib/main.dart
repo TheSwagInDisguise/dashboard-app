@@ -3,18 +3,24 @@ import 'package:provider/provider.dart';
 
 import 'screens/shell.dart';
 import 'state/app_state.dart';
+import 'state/tasks_store.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load persisted settings; AppState.load() never throws, so the app
-  // always boots — even with no storage available.
-  final state = await AppState.load();
+  // Load persisted state; neither loader throws, so the app always boots —
+  // even with no storage available.
+  final appState = await AppState.load();
+  final tasksStore = TasksStore();
+  await tasksStore.load();
 
   runApp(
-    ChangeNotifierProvider<AppState>.value(
-      value: state,
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AppState>.value(value: appState),
+        ChangeNotifierProvider<TasksStore>.value(value: tasksStore),
+      ],
       child: const DayDeckApp(),
     ),
   );

@@ -1,42 +1,74 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:daydeck/main.dart';
 import 'package:daydeck/state/app_state.dart';
+import 'package:daydeck/state/tasks_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('app boots and renders the terminal-styled today view', (tester) async {
-    final state = AppState.inMemory();
+    SharedPreferences.setMockInitialValues({});
+    final appState = AppState.inMemory();
+    final tasks = TasksStore();
+    await tasks.load();
 
     await tester.pumpWidget(
-      ChangeNotifierProvider<AppState>.value(
-        value: state,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AppState>.value(value: appState),
+          ChangeNotifierProvider<TasksStore>.value(value: tasks),
+        ],
         child: const DayDeckApp(),
       ),
     );
     await tester.pump();
 
-    // Header wordmark and navigation render.
     expect(find.text('day'), findsWidgets);
     expect(find.text('TODAY'), findsWidgets);
     expect(find.text('TASKS'), findsWidgets);
     expect(find.text('HABITS'), findsWidgets);
     expect(find.text('SETTINGS'), findsWidgets);
-
-    // Sample data is visible and labelled as such.
     expect(find.text('CALENDAR'), findsOneWidget);
-    expect(find.text('Buy oat milk'), findsOneWidget);
     expect(find.text('Move 20 min'), findsOneWidget);
   });
 
-  testWidgets('switching to settings exposes scheme picker and token guide', (tester) async {
-    final state = AppState.inMemory();
+  testWidgets('tasks added to the live store appear on the today view', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final tasks = TasksStore();
+    await tasks.load();
+    await tasks.add(title: 'live store probe task');
+
+    final appState = AppState.inMemory();
 
     await tester.pumpWidget(
-      ChangeNotifierProvider<AppState>.value(
-        value: state,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AppState>.value(value: appState),
+          ChangeNotifierProvider<TasksStore>.value(value: tasks),
+        ],
+        child: const DayDeckApp(),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('live store probe task'), findsWidgets);
+  });
+
+  testWidgets('switching to settings exposes scheme picker and token guide', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final appState = AppState.inMemory();
+    final tasks = TasksStore();
+    await tasks.load();
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AppState>.value(value: appState),
+          ChangeNotifierProvider<TasksStore>.value(value: tasks),
+        ],
         child: const DayDeckApp(),
       ),
     );

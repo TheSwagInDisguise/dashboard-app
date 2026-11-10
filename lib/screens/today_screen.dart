@@ -5,14 +5,20 @@ import 'package:provider/provider.dart';
 
 import '../data/demo_data.dart';
 import '../state/app_state.dart';
+import '../state/tasks_store.dart';
 import '../theme/app_theme.dart';
 import '../theme/palettes.dart';
+import '../version.dart';
 import '../widgets/blinking_cursor.dart';
 import '../widgets/section_header.dart';
+import '../widgets/task_row.dart';
+import '../widgets/task_sheet.dart';
+import '../widgets/terminal_card.dart';
 import '../widgets/terminal_chip.dart';
 
-/// The terminal-styled "Today" dashboard. Phase 1 ships it with clearly
-/// labelled sample data; Phases 2–6 wire in real tasks, calendar and sync.
+/// The terminal-styled "Today" dashboard.
+/// Tasks are live (local store). Calendar events and habits still show
+/// clearly-labelled sample data until Phases 4 and 6.
 class TodayScreen extends StatelessWidget {
   const TodayScreen({super.key});
 
@@ -25,6 +31,7 @@ class TodayScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
+    final store = context.watch<TasksStore>();
     final p = app.palette;
     final now = DateTime.now();
     final dayOfYear = now.difference(DateTime(now.year, 1, 1)).inDays + 1;
@@ -35,7 +42,7 @@ class TodayScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _StatusStrip(palette: p),
+          _StatusStrip(palette: p, count: store.openCount),
           const SizedBox(height: 10),
           _HeaderRow(
             palette: p,
@@ -45,44 +52,69 @@ class TodayScreen extends StatelessWidget {
           ),
           const SizedBox(height: 14),
 
-          // ---------- CALENDAR ----------
+          // ---------- CALENDAR (sample until Phase 4) ----------
           SectionHeader(palette: p, title: 'CALENDAR', trailing: 'sample'),
           const SizedBox(height: 8),
-          _Card(
+          TerminalCard(
             palette: p,
             children: [
               for (final event in kDemoEvents) ...[
-                if (event != kDemoEvents.first) _Rule(palette: p),
+                if (event != kDemoEvents.first) TerminalCardRule(palette: p),
                 _EventRow(palette: p, event: event),
               ],
             ],
           ),
           const SizedBox(height: 14),
 
-          // ---------- TASKS ----------
-          SectionHeader(palette: p, title: 'TASKS', trailing: '3 open · 1 done'),
+          // ---------- TASKS (live) ----------
+          SectionHeader(palette: p, title: 'TASKS', trailing: '${store.openCount} open'),
           const SizedBox(height: 8),
-          _Card(
+          TerminalCard(
             palette: p,
             children: [
-              for (final task in kDemoTasks) ...[
-                if (task != kDemoTasks.first) _Rule(palette: p),
-                _TaskRow(palette: p, task: task),
+              if (store.openTasks.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    '> no open tasks — slate clear.',
+                    textAlign: TextAlign.center,
+                    style: mono(context, size: 11, color: p.dim),
+                  ),
+                )
+              else ...[
+                for (final task in store.openTasks.take(4)) ...[
+                  if (task != store.openTasks.take(4).first) TerminalCardRule(palette: p),
+                  TaskRow(
+                    palette: p,
+                    task: task,
+                    onToggle: () => store.toggleDone(task.id),
+                    onOpen: () => showTaskSheet(context, initial: task),
+                  ),
+                ],
+                if (store.openTasks.length > 4)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      '+ ${store.openTasks.length - 4} more in TASKS →',
+                      textAlign: TextAlign.center,
+                      style: mono(context, size: 9.5, color: p.dim),
+                    ),
+                  ),
               ],
-              const SizedBox(height: 2),
+              const SizedBox(height: 6),
               _AddTaskGhostRow(palette: p),
             ],
           ),
           const SizedBox(height: 14),
 
-          // ---------- HABITS ----------
-          SectionHeader(palette: p, title: 'HABITS', trailing: 'today'),
+          // ---------- HABITS (sample until Phase 6) ----------
+          SectionHeader(palette: p, title: 'HABITS', trailing: 'sample'),
           const SizedBox(height: 8),
-          _Card(
+          TerminalCard(
             palette: p,
             children: [
               for (final habit in kDemoHabits) ...[
-                if (habit != kDemoHabits.first) _Rule(palette: p),
+                if (habit != kDemoHabits.first) TerminalCardRule(palette: p),
                 _HabitRow(palette: p, habit: habit),
               ],
             ],
@@ -90,7 +122,7 @@ class TodayScreen extends StatelessWidget {
           const SizedBox(height: 12),
 
           Text(
-            'sample data — tasks, calendar & sync land in Phases 2–6',
+            'tasks are live & local · calendar & habits arrive in Phases 4 & 6',
             textAlign: TextAlign.center,
             style: mono(context, size: 9, color: p.dim.withValues(alpha: 0.75), letterSpacing: 0.6),
           ),
@@ -103,9 +135,10 @@ class TodayScreen extends StatelessWidget {
 // ===========================================================================
 
 class _StatusStrip extends StatelessWidget {
-  const _StatusStrip({required this.palette});
+  const _StatusStrip({required this.palette, required this.count});
 
   final TerminalPalette palette;
+  final int count;
 
   @override
   Widget build(BuildContext context) {
@@ -125,7 +158,7 @@ class _StatusStrip extends StatelessWidget {
             ],
           ),
           _LiveClock(palette: palette),
-          Text('v0.1.0', style: mono(context, size: 10, color: palette.dim)),
+          Text('v$kAppVersion', style: mono(context, size: 10, color: palette.dim)),
         ],
       ),
     );
@@ -202,35 +235,6 @@ class _HeaderRow extends StatelessWidget {
   }
 }
 
-class _Card extends StatelessWidget {
-  const _Card({required this.palette, required this.children});
-
-  final TerminalPalette palette;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: palette.panel,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: palette.border),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
-    );
-  }
-}
-
-class _Rule extends StatelessWidget {
-  const _Rule({required this.palette});
-
-  final TerminalPalette palette;
-
-  @override
-  Widget build(BuildContext context) => Divider(color: palette.border, height: 14);
-}
-
 // ---------- calendar ----------
 
 class _EventRow extends StatelessWidget {
@@ -276,99 +280,6 @@ class _EventRow extends StatelessWidget {
   }
 }
 
-// ---------- tasks ----------
-
-class _TaskRow extends StatelessWidget {
-  const _TaskRow({required this.palette, required this.task});
-
-  final TerminalPalette palette;
-  final DemoTask task;
-
-  Color _priorityColor() => switch (task.priority) {
-        'P1' => palette.bad,
-        'P2' => palette.warn,
-        _ => palette.dim,
-      };
-
-  Color _dueColor() => switch (task.dueKind) {
-        DemoDueKind.overdue => palette.bad,
-        DemoDueKind.today => palette.warn,
-        DemoDueKind.done => palette.dim,
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          task.done ? '[x]' : '[ ]',
-          style: mono(
-            context,
-            size: 13,
-            weight: FontWeight.w700,
-            color: task.done ? palette.good : palette.accent,
-          ),
-        ),
-        const SizedBox(width: 9),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                task.title,
-                style: TextStyle(
-                  color: task.done ? palette.dim : palette.text,
-                  fontSize: 12.5,
-                  height: 1.35,
-                  decoration: task.done ? TextDecoration.lineThrough : null,
-                  decorationColor: palette.dim,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Row(
-                children: [
-                  Text(task.dueLabel, style: mono(context, size: 9, color: _dueColor())),
-                  const SizedBox(width: 8),
-                  TerminalChip(label: task.priority, color: _priorityColor()),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AddTaskGhostRow extends StatelessWidget {
-  const _AddTaskGhostRow({required this.palette});
-
-  final TerminalPalette palette;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('tasks arrive in Phase 2 — local & offline')),
-        );
-      },
-      child: Padding(
-        padding: const EdgeInsets.only(left: 3, top: 2, bottom: 2),
-        child: Row(
-          children: [
-            Text('+', style: mono(context, size: 12, weight: FontWeight.w700, color: palette.accent)),
-            const SizedBox(width: 9),
-            Text('add task…', style: mono(context, size: 11, color: palette.dim)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 // ---------- habits ----------
 
 class _HabitRow extends StatelessWidget {
@@ -384,7 +295,6 @@ class _HabitRow extends StatelessWidget {
         Expanded(
           child: Text(habit.name, style: TextStyle(color: palette.text, fontSize: 12.5)),
         ),
-        // 7-day completion dots, Monday first
         Row(
           children: [
             for (final done in habit.week)
@@ -412,6 +322,30 @@ class _HabitRow extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _AddTaskGhostRow extends StatelessWidget {
+  const _AddTaskGhostRow({required this.palette});
+
+  final TerminalPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => showTaskSheet(context),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 3, top: 2, bottom: 2),
+        child: Row(
+          children: [
+            Text('+', style: mono(context, size: 12, weight: FontWeight.w700, color: palette.accent)),
+            const SizedBox(width: 9),
+            Text('add task…', style: mono(context, size: 11, color: palette.dim)),
+          ],
+        ),
+      ),
     );
   }
 }

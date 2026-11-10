@@ -7,8 +7,8 @@ import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../theme/palettes.dart';
 import '../widgets/section_header.dart';
+import '../version.dart';
 
-const String _kAppVersion = '0.1.0+1';
 const String _kRepoUrl = 'https://github.com/TheSwagInDisguise/dashboard-app';
 const String _kReleasesUrl = 'https://github.com/TheSwagInDisguise/dashboard-app/releases';
 const String _kTokensUrl = 'https://github.com/settings/personal-access-tokens';
@@ -328,7 +328,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _AboutRow(palette: p, label: 'version', value: _kAppVersion),
+              _AboutRow(palette: p, label: 'version', value: '$kAppVersion+1'),
               _AboutRow(palette: p, label: 'code', value: 'TheSwagInDisguise/dashboard-app', onTap: () => _openUrl(_kRepoUrl)),
               _AboutRow(palette: p, label: 'releases', value: 'installable APK builds', onTap: () => _openUrl(_kReleasesUrl)),
               _AboutRow(palette: p, label: 'data', value: 'private repo dashboard-data'),

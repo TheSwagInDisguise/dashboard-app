@@ -5,7 +5,7 @@ The GitHub repos are the source of truth — workspace snapshots of `/home/user`
 `.git/` directories and executable bits, and exclude hidden dot-folders, so local copies may
 look broken but the pushed repos are never affected.
 
-_Last updated: 2026-11-10 (Phase 1 delivered — CI green, v0.1.0 published, keystore copies deleted)_
+_Last updated: 2026-11-10 (Phase 2 implemented & released as v0.2.0)_
 
 ---
 
@@ -120,8 +120,27 @@ Pushed & shipped (this same session):
   only copies. (Rebuilds work unchanged; the signing identity is preserved.)
 - A live web preview of this build is being served on port 8090 of this machine.
 
-Outstanding for the owner (Phase 1 acceptance): install APK on phone; confirm it launches;
-theme sign-off or tweaks; then Phase 2 (tasks) can start.
+Outstanding for the owner: install v0.2.0 APK on phone and run the Phase-2 checklist
+(in the session report): add/complete/edit/delete/persist-across-restart/due dates/priority/
+today view shows live tasks.
+
+### 2026-11-10 — Phase 2 (tasks, local storage)
+- **Storage decision locked**: single JSON document in `shared_preferences` (key `tasks_json`)
+  with the previous good copy rotated to `tasks_json_backup` on every save; corrupt main →
+  transparent restore from backup + an in-app recovery banner (`TasksStore.recoveryNotice`).
+  No SQL engine; model already carries `updatedAt` + soft-delete tombstones for Phase 3 LWW.
+- Model: `lib/models/task.dart` (`id`, `title`, `done`, `priority` P1–P3, `dueDate` `YYYY-MM-DD`,
+  `createdAt/updatedAt/deletedAt`). Store: `lib/state/tasks_store.dart` (ChangeNotifier;
+  atomic rotate-then-write; `openTasks` sort = due-first → priority → newest; tombstoned deletes).
+- UI: Tasks tab is fully live (add/edit/complete/delete; due chips today/tomorrow/DD-MM(+YYYY);
+  overdue in red; `CLEAR DONE` with confirm; empty state; recovery banner). Today view tasks
+  section now renders the live store (top 4 open); ghost row opens the sheet; sysbar shows
+  real open/overdue counts. Add/Edit via bottom sheet (`lib/widgets/task_sheet.dart`) with
+  priority segmented control + due quick-chips (none/today/tomorrow/pick) and date picker.
+- Dates: `lib/utils/dates.dart` — AU 24-h, DD/MM/YYYY display, day-granularity keys.
+- Version const file: `lib/version.dart` (`kAppVersion = '0.2.0'`, keep in sync with pubspec).
+- Verified: `flutter analyze` clean · **7/7 tests green** (store logic incl. corrupt-backup
+  recovery + 3 widget tests). Released as **v0.2.0** (tag pushed; CI publishes Release).
 
 ## 5. Environment gotchas (this Arena workspace)
 
@@ -165,7 +184,7 @@ theme sign-off or tweaks; then Phase 2 (tasks) can start.
 - [x] Phase 0 — decisions, questions answered (2026-11-10): name DayDeck · modern scheme default ·
       24h/DD-MM-YYYY · keystore generate-and-hand-off-via-secrets · MIT licence
 - [ ] Phase 1 — repo + CI + signed APK + theme **(this session — verify install on phone)**
-- [ ] Phase 2 — tasks: local storage (see *Open decisions*), add/edit/complete/due/priority
+- [x] Phase 2 — tasks: local storage (JSON + backup), add/edit/complete/due/priority
 - [ ] Phase 3 — sync to `dashboard-data` (Contents API, LWW + conflicts.json); sync status in header
 - [ ] Phase 4 — iCal fetch (Android direct + data-repo hourly Action → `calendar.json`); Today view;
       token-expired banner + paste-new-token flow
@@ -178,8 +197,7 @@ theme sign-off or tweaks; then Phase 2 (tasks) can start.
 
 ## 8. Open decisions (bring up with owner)
 
-1. **Phase 2 storage engine** — leaning JSON document + atomic write (web-compatible, zero codegen);
-   `drift`/`sqflite` give SQL but make web painful (wasm/sqlite). Decide at Phase 2 start.
+1. ~~Phase 2 storage engine~~ — decided 2026-11-10: JSON document + automatic backup (see Phase 2 log).
 2. **Icon** — PIL-rendered candidate; owner hasn’t signed off yet (can swap later, cheap).
 3. **Theme sign-off** — `modern` default chosen 2026-11-10 from preview; owner may still tweak
    hues/density ("tell me what to change").
@@ -203,11 +221,8 @@ GIT_ASKPASS=/tmp/askpass GIT_TERMINAL_PROMPT=0 GITHUB_TOKEN=$(cat /home/user/day
 
 ## 10. Immediate next steps
 
-1. `git push` the Phase 1 scaffold; **set repo secrets** via GitHub API (base64 of
-   `daydeck-private/daydeck-release.p12` + passwords) — script stored locally, token never printed.
-2. Tag `v0.1.0`, watch the `release` workflow, iterate if red.
-3. Owner installs APK on phone (link in final report) and runs the Phase-1 checklist.
-4. Once CI is green: **delete `daydeck-private/daydeck-release.p12` and `keystore-password.txt`**
-   from this machine (GitHub secrets remain the only copies).
-5. Collect theme feedback → adjust palette/tone → maybe tag `v0.1.1`.
-6. Phase 2 kickoff: tasks with local storage.
+1. ~~Phase 1~~ shipped 2026-11-10 (v0.1.0, CI green, local keystore deleted).
+2. ~~Phase 2~~ shipped 2026-11-10 (v0.2.0). Owner to install + checklist.
+3. Collect any theme tweaks; if behaviour changes are requested, cut `v0.2.1`.
+4. Phase 3 kickoff: sync to `dashboard-data` (Contents API, LWW + conflicts.json, schemaVersion
+   manifest); start with read-only pull + push of tasks; conflict UI minimal; token-expired banner.
