@@ -5,7 +5,7 @@ The GitHub repos are the source of truth — workspace snapshots of `/home/user`
 `.git/` directories and executable bits, and exclude hidden dot-folders, so local copies may
 look broken but the pushed repos are never affected.
 
-_Last updated: 2026-11-10 (v0.8.0 — AMOLED + task reminders + roadmap features 1–12)_
+_Last updated: 2026-11-10 (v0.9.0 — device calendar read for private shared calendars)_
 
 ---
 
@@ -333,6 +333,57 @@ palette** and **task reminders**. All 12 roadmap items shipped, plus per-task re
   `FLAG_ACTIVITY_NEW_TASK | CLEAR_TOP`.
 - share/shortcut/tile inputs all funnel through MainActivity → `daydeck/input` channel
   (`nativeInput` callback + `getInitialInput` for cold starts) → single router in Shell.
+
+## Phase 9 — Device calendar read (private shared calendars) — v0.9.0 (2026-11-10)
+
+Problem (owner): a **shared calendar** shows only *Calendar ID / Public URL / Embed code*
+in Settings → Integrate calendar — no “Secret address in iCal format” (owner-only field).
+The owner of that shared calendar won’t (can’t) hand out the secret link, so iCal and the
+hourly web mirror are both dead ends for it.
+
+Solution: read what the phone already syncs via Android `CalendarContract` (read-only).
+Events flow into the exact same `CalendarFeed` model the iCal path feeds — TODAY agenda,
+search, widget and auto-close all work unchanged. **Nothing leaves the phone.**
+
+- **Native (MainActivity.kt)**: new `daydeck/devicecal` channel beside `daydeck/input` —
+  `checkCalendarPermission` / `requestCalendarPermission` (in-activity runtime dialog,
+  requestCode 7701), `listCalendars` (CalendarContract.Calendars → id/name/account/color/
+  syncEnabled), `listEvents` (`CalendarContract.Instances.query` expands recurrences).
+  No new dependencies, no androidx.core — `checkSelfPermission` is built into Context.
+- **Manifest**: `READ_CALENDAR` (opt-in, permission is only exercised when the toggle
+  is on and granted; Google Calendar itself syncs the calendar already).
+- **Dart**: `lib/data/device_calendar.dart` → `DeviceCalendarReader` (kIsWeb/Android-only
+  via `isSupported`) + pure `mergeCalendarSources()` (device wins over iCal; duplicate
+  Google events arriving via both paths collapse via title+day+10-min bucket / all-day
+  key) + `DeviceCalendarInfo`.
+- **CalendarFeed**: `_refreshNative()` now tolerates partial failure — iCal errors and
+  device errors land in `feed.notes` (TODAY surfaces them) instead of killing the whole
+  refresh. Status stays `ok` when the device path produces events; `disabled` only when
+  NOTHING is configured (back-compat with v0.7 days); `error` only when iCal was the
+  hope and it failed with zero events (old behaviour). Existing cache unchanged.
+- **AppState**: `deviceCalendarEnabled` (default **true**) + `deviceCalendarIds`
+  (empty = every calendar on the phone). Per-device by design — never synced.
+- **Settings → GOOGLE CALENDAR**: new **DEVICE CALENDAR** section (Android only,
+  hidden on web) right below it: toggle → user gesture triggers the runtime permission
+  dialog; when denied → GRANT row; when granted → "reading N calendars" + CHOOSE
+  (checkmark list w/ color dots + account names; unsynced calendars flagged
+  "not syncing to this phone"; SAVE requires ≥1 checked; checking all collapses back
+  to the empty-set default). iCal URL field stays exactly as it was — both sources merge.
+- **Web** unchanged: `calendar.json` via the hourly Action (needs the secret iCal — not
+  applicable to this calendar; web view of it remains unavailable).
+- **37/37 tests green** (4 new for mergeCalendarSources), analyze clean.
+- Web labels: device-synced Google events ARE Google Calendar events, so GCAL chips /
+  “google calendar” captions stay accurate on both paths. No renames needed.
+
+### Kotlin/native gotchas (device calendar)
+- `Instances.query(contentResolver, projection, beginMs, endMs)` does recurrence expansion —
+  never query Instances without bounds. `EVENT_ID` repeats across instances: uid carries
+  `dev:<calId>:<eventId>:<beginMs>` to stay unique.
+- All-day instances are local-midnight millis (end exclusive) — consistent with the iCal model.
+- Permission dialog callback goes through `onRequestPermissionsResult`; `super` is called
+  first so Flutter’s own requests aren’t disturbed.
+- CI does the compile; device behaviour ("shared calendar must be ticked on the phone")
+  is the one thing CI can’t verify — owner is the tester again.
 
 ## Phase 7 — Z Fold 5 inner-display layout — v0.7.0 (2026-11-10)
 

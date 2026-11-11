@@ -16,6 +16,8 @@ class AppState extends ChangeNotifier {
   DayDeckScheme _scheme = DayDeckScheme.modern; // dark-first default
   int _reminderMinutes = 20 * 60 + 30; // 20:30 (owner default)
   String _icalUrl = '';
+  bool _deviceCalendarEnabled = true; // Android reads phone-synced calendars (incl. shared)
+  Set<String> _deviceCalendarIds = const {}; // empty = all calendars on the phone
   String? _githubToken;
 
   /// In-memory state for tests and as a last-resort fallback — nothing here
@@ -54,6 +56,8 @@ class AppState extends ChangeNotifier {
         }
         s._reminderMinutes = storedReminder;
         s._icalUrl = p.getString('ical_url') ?? ''; // migrated to secure storage below
+        s._deviceCalendarEnabled = p.getBool('device_calendar_enabled') ?? true;
+        s._deviceCalendarIds = (p.getStringList('device_calendar_ids') ?? const <String>[]).toSet();
       } catch (_) {
         // Corrupt prefs: fall back to defaults rather than crash.
       }
@@ -138,6 +142,29 @@ class AppState extends ChangeNotifier {
     } catch (_) {
       // Secure storage unavailable — keep in memory for this session only.
     }
+  }
+
+  // ---- Device calendar (Android only; reads phone-synced calendars) ------
+  // Per-device by design: calendar ids differ between handsets, so the
+  // selection is kept in local prefs and never synced.
+  bool get deviceCalendarEnabled => _deviceCalendarEnabled;
+  List<String> get deviceCalendarIds => List.unmodifiable(_deviceCalendarIds);
+
+  Future<void> setDeviceCalendarEnabled(bool value) async {
+    _deviceCalendarEnabled = value;
+    notifyListeners();
+    try {
+      await _prefs?.setBool('device_calendar_enabled', value);
+    } catch (_) {}
+  }
+
+  /// Empty list = every synced calendar on this phone.
+  Future<void> setDeviceCalendarIds(List<String> ids) async {
+    _deviceCalendarIds = ids.toSet();
+    notifyListeners();
+    try {
+      await _prefs?.setStringList('device_calendar_ids', ids);
+    } catch (_) {}
   }
 
   // ---- GitHub sync token (stored only on this device) -------------------

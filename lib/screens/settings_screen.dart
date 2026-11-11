@@ -11,6 +11,7 @@ import '../version.dart';
 import 'export_backup.dart';
 import 'conflicts_sheet.dart';
 import '../data/calendar_feed.dart';
+import 'device_calendar_section.dart';
 import '../sync/sync_service.dart';
 import '../widgets/section_header.dart';
 
@@ -458,6 +459,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 14),
+        DeviceCalendarSection(palette: p),
+        const SizedBox(height: 14),
                     ],
                     ...[
 
@@ -798,6 +801,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
         ),
+        const SizedBox(height: 14),
+        DeviceCalendarSection(palette: p),
         const SizedBox(height: 14),
             ],
             ...[

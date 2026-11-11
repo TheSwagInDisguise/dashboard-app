@@ -9,10 +9,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../state/app_state.dart';
 import '../state/event_store.dart';
 import '../sync/github_client.dart';
+import 'device_calendar.dart';
 import 'ics.dart';
 
 /// Where the user-facing events come from:
-///   Android / desktop: direct fetch of the secret iCal URL (CORS-free).
+///   Android / desktop: direct fetch of the secret iCal URL (CORS-free),
+///        plus the calendars synced onto the phone (Android only) — the
+///        reliable path for a *private shared* calendar with no secret link.
 ///   Web: the `calendar.json` mirror in the private dashboard-data repo,
 ///        refreshed hourly by a GitHub Action from the same secret URL
 ///        (browsers can't read Google's feed cross-origin). Read via the
@@ -42,7 +45,8 @@ class CalendarFeed extends ChangeNotifier with WidgetsBindingObserver {
   DateTime? get lastFetched => _lastFetched;
   String? get lastError => _lastError;
 
-  bool get isConfigured => kIsWeb ? (_appState.syncToken?.isNotEmpty ?? false) : _appState.icalUrl.isNotEmpty;
+  bool get isConfigured =>
+      kIsWeb ? (_appState.syncToken?.isNotEmpty ?? false) : (_appState.icalUrl.isNotEmpty || _appState.deviceCalendarEnabled);
 
   /// Restore the cached snapshot so the UI has content offline.
   Future<void> loadCache() async {
@@ -103,35 +107,82 @@ class CalendarFeed extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _refreshNative() async {
+    final icalEvents = <CalendarEventItem>[];
+    final deviceEvents = <CalendarEventItem>[];
+    final notes = <String>[];
+
+    // ---- iCal (secret address) — optional now that device calendar exists ----
     final url = _appState.icalUrl.trim();
-    if (url.isEmpty) {
+    String? icalError;
+    if (url.isNotEmpty) {
+      try {
+        final uri = Uri.tryParse(url);
+        if (uri == null || !(uri.isScheme('https') || uri.isScheme('http'))) {
+          icalError = 'that doesn’t look like a valid iCal URL';
+        } else {
+          final response = await http
+              .get(uri, headers: const {'Accept': 'text/calendar, text/plain, */*'})
+              .timeout(const Duration(seconds: 25));
+          if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 404) {
+            icalError = 'Google refused the feed — is the secret address still valid? (Settings → CALENDAR → guide)';
+          } else if (response.statusCode != 200) {
+            icalError = 'calendar fetch failed (HTTP ${response.statusCode})';
+          } else {
+            final raw = parseIcs(response.body);
+            final now = DateTime.now();
+            final result = expandEvents(
+              raw,
+              DateTime(now.year, now.month, now.day).subtract(const Duration(days: 1)),
+              DateTime(now.year, now.month, now.day).add(const Duration(days: 31)),
+            );
+            icalEvents.addAll(result.events);
+            notes.addAll(result.skippedRules);
+          }
+        }
+      } catch (e) {
+        icalError = _friendlyError(e);
+      }
+    }
+
+    // ---- On-device calendars (Android) — incl. private shared ones ----------
+    if (_appState.deviceCalendarEnabled) {
+      try {
+        final granted = await DeviceCalendarReader.checkPermission();
+        if (granted) {
+          final now = DateTime.now();
+          final events = await DeviceCalendarReader.listEvents(
+            begin: DateTime(now.year, now.month, now.day).subtract(const Duration(days: 1)),
+            end: DateTime(now.year, now.month, now.day).add(const Duration(days: 31)),
+            includeCalendarIds: _appState.deviceCalendarIds.toSet(),
+          );
+          deviceEvents.addAll(events);
+        } else {
+          notes.add('device calendar: permission not granted — grant it in Settings → GOOGLE CALENDAR');
+        }
+      } catch (e) {
+        notes.add('device calendar: ${e.toString().replaceFirst('Exception: ', '')}');
+      }
+    }
+
+    if (icalError != null && deviceEvents.isNotEmpty) notes.insert(0, 'iCal: $icalError');
+    _events = mergeCalendarSources(icalEvents, deviceEvents);
+    _notes = notes;
+
+    final attempted = url.isNotEmpty || _appState.deviceCalendarEnabled;
+    if (!attempted) {
       _status = CalendarStatus.disabled;
-      _events = [];
       return;
     }
-    final uri = Uri.tryParse(url);
-    if (uri == null || !(uri.isScheme('https') || uri.isScheme('http'))) {
-      throw const _FeedException('that doesn’t look like a valid iCal URL');
+    if (_events.isNotEmpty) {
+      _status = CalendarStatus.ok;
+    } else if (icalError != null) {
+      // Old behaviour: configured-but-unreachable feed surfaces as an error.
+      throw _FeedException(icalError);
+    } else {
+      // Only the device path was configured and it produced nothing —
+      // the reason (permission missing, etc.) is in the notes.
+      _status = CalendarStatus.ok;
     }
-
-    final response = await http.get(uri, headers: const {'Accept': 'text/calendar, text/plain, */*'})
-        .timeout(const Duration(seconds: 25));
-    if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 404) {
-      throw const _FeedException('Google refused the feed — is the secret address still valid? (Settings → CALENDAR → guide)');
-    }
-    if (response.statusCode != 200) {
-      throw _FeedException('calendar fetch failed (HTTP ${response.statusCode})');
-    }
-
-    final raw = parseIcs(response.body);
-    final now = DateTime.now();
-    final result = expandEvents(
-      raw,
-      DateTime(now.year, now.month, now.day).subtract(const Duration(days: 1)),
-      DateTime(now.year, now.month, now.day).add(const Duration(days: 31)),
-    );
-    _events = result.events;
-    _notes = result.skippedRules;
   }
 
   Future<void> _refreshWeb() async {
