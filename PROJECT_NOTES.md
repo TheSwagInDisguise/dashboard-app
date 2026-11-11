@@ -376,6 +376,9 @@ search, widget and auto-close all work unchanged. **Nothing leaves the phone.**
   “google calendar” captions stay accurate on both paths. No renames needed.
 
 ### Kotlin/native gotchas (device calendar)
+- CI catch on first build: the Calendars constant is `ACCOUNT_NAME`, NOT `CALENDAR_ACCOUNT_NAME`
+  (fixed in fa9c0bc, tag moved). Rule of thumb: only `CALENDAR_DISPLAY_NAME`/`CALENDAR_COLOR` carry
+  the CALENDAR_ prefix on the Calendars contract — account fields don't.
 - `Instances.query(contentResolver, projection, beginMs, endMs)` does recurrence expansion —
   never query Instances without bounds. `EVENT_ID` repeats across instances: uid carries
   `dev:<calId>:<eventId>:<beginMs>` to stay unique.
