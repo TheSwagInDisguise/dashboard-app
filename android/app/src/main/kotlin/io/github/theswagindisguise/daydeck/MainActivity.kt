@@ -118,7 +118,7 @@ class MainActivity : FlutterActivity() {
             val projection = arrayOf(
                 CalendarContract.Calendars._ID,
                 CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
-                CalendarContract.Calendars.CALENDAR_ACCOUNT_NAME,
+                CalendarContract.Calendars.ACCOUNT_NAME,
                 CalendarContract.Calendars.CALENDAR_COLOR,
                 CalendarContract.Calendars.SYNC_EVENTS,
             )
@@ -132,7 +132,7 @@ class MainActivity : FlutterActivity() {
             )?.use { cursor ->
                 val idIdx = cursor.getColumnIndexOrThrow(CalendarContract.Calendars._ID)
                 val nameIdx = cursor.getColumnIndexOrThrow(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME)
-                val accountIdx = cursor.getColumnIndexOrThrow(CalendarContract.Calendars.CALENDAR_ACCOUNT_NAME)
+                val accountIdx = cursor.getColumnIndexOrThrow(CalendarContract.Calendars.ACCOUNT_NAME)
                 val colorIdx = cursor.getColumnIndexOrThrow(CalendarContract.Calendars.CALENDAR_COLOR)
                 val syncIdx = cursor.getColumnIndexOrThrow(CalendarContract.Calendars.SYNC_EVENTS)
                 while (cursor.moveToNext()) {
