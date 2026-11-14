@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -58,7 +60,9 @@ class _DeviceCalendarSectionState extends State<DeviceCalendarSection> {
       await app.setDeviceCalendarEnabled(true);
       if (mounted) await feed.refresh();
       if (!granted && mounted) {
-        _snack('permission denied — enable “calendar” for daydeck in Android settings');
+        _snack(Platform.isIOS
+            ? 'permission denied — Settings → Privacy & Security → Calendars → daydeck'
+            : 'permission denied — enable “calendar” for daydeck in Android settings');
       }
     } else {
       await app.setDeviceCalendarEnabled(false);
@@ -114,6 +118,7 @@ class _DeviceCalendarSectionState extends State<DeviceCalendarSection> {
     if (kIsWeb) {
       return const SizedBox.shrink(); // web keeps the GitHub Action path; see GOOGLE CALENDAR above
     }
+    final isIos = Platform.isIOS;
     final p = this.p;
     final app = context.watch<AppState>();
     final enabled = app.deviceCalendarEnabled;
@@ -122,7 +127,7 @@ class _DeviceCalendarSectionState extends State<DeviceCalendarSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader(palette: p, title: 'DEVICE CALENDAR', trailing: 'android'),
+        SectionHeader(palette: p, title: 'DEVICE CALENDAR', trailing: isIos ? 'iphone' : 'android'),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
@@ -136,7 +141,7 @@ class _DeviceCalendarSectionState extends State<DeviceCalendarSection> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.phone_android, size: 20, color: p.dim),
+                  Icon(isIos ? Icons.phone_iphone : Icons.phone_android, size: 20, color: p.dim),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -170,7 +175,9 @@ class _DeviceCalendarSectionState extends State<DeviceCalendarSection> {
                     children: [
                       Expanded(
                         child: Text(
-                          'calendar permission needed — the app can only read what the phone syncs',
+                          isIos
+                              ? 'calendar permission needed — daydeck can only read what this iPhone syncs'
+                              : 'calendar permission needed — the app can only read what the phone syncs',
                           style: TextStyle(color: p.warn, fontSize: 10.5, height: 1.45),
                         ),
                       ),
@@ -199,8 +206,9 @@ class _DeviceCalendarSectionState extends State<DeviceCalendarSection> {
                 ],
                 const SizedBox(height: 8),
                 Text(
-                  'tip · shared calendar not on this phone yet? open Google Calendar → ☰ → '
-                  'settings → your account → make sure the shared calendar is ticked, then come back and pull-to-refresh',
+                  isIos
+                      ? 'tip · shared calendar not on this iPhone yet? Settings → Calendar → Accounts → your account → tick the shared calendar, then come back and pull-to-refresh'
+                      : 'tip · shared calendar not on this phone yet? open Google Calendar → ☰ → settings → your account → make sure the shared calendar is ticked, then come back and pull-to-refresh',
                   style: mono(context, size: 8, color: p.dim).copyWith(height: 1.5),
                 ),
               ],

@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:home_widget/home_widget.dart';
 
@@ -5,9 +7,9 @@ import 'state/tasks_store.dart';
 
 /// Pushes the glance-state into the Android home-screen widget.
 /// Keys match DayDeckWidgetReceiver.kt — keep them in sync.
-/// No-op on web (browsers have no home-screen widget).
+/// No-op on web and iOS (no WidgetKit target yet — coming in a follow-up).
 Future<void> updateDayDeckWidget(TasksStore store) async {
-  if (kIsWeb) return;
+  if (kIsWeb || !Platform.isAndroid) return;
   try {
     final open = store.openTasks;
     final lines = open.take(4).map((t) {

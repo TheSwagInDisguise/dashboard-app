@@ -5,7 +5,7 @@ The GitHub repos are the source of truth — workspace snapshots of `/home/user`
 `.git/` directories and executable bits, and exclude hidden dot-folders, so local copies may
 look broken but the pushed repos are never affected.
 
-_Last updated: 2026-11-10 (v0.9.0 — device calendar read for private shared calendars)_
+_Last updated: 2026-11-10 (v0.10.0 — iOS port; iPhone is now the primary platform)_
 
 ---
 
@@ -387,6 +387,83 @@ search, widget and auto-close all work unchanged. **Nothing leaves the phone.**
   first so Flutter’s own requests aren’t disturbed.
 - CI does the compile; device behaviour ("shared calendar must be ticked on the phone")
   is the one thing CI can’t verify — owner is the tester again.
+
+## Phase 10 — iOS port (iPhone is primary now) — v0.10.0 (2026-11-10)
+
+Owner switched phones and wants DayDeck natively on iOS, sideloaded with a **free Apple ID**
+(7-day provisioning profiles, re-signed from their Mac). No PWA. Architecture unchanged —
+still Flutter + Dart; only platform seams are new. **Owner actions owed:** see the iOS runbook
+below (signing steps on their Mac — cannot be done from here).
+
+### What landed
+- `ios/` scaffolded (`flutter create --platforms=ios --org io.github.theswagindisguise`).
+  Bundle id `io.github.theswagindisguise.daydeck`, display name DayDeck, launch screen dark,
+  app icons regenerated from `assets/icon/daydeck_icon.png` (flattened on #0F1117).
+- **Device calendar is back, via EventKit** (the v0.9.0 feature, ported): `daydeck/devicecal`
+  channel in `ios/Runner/AppDelegate.swift` — `checkCalendarPermission` /
+  `requestCalendarPermission` (iOS 17 `requestFullAccessToEvents`, legacy iOS ≤16 fallback),
+  `listCalendars` (calendarIdentifier / title / source.title / cgColor→RGB), `listEvents`
+  (`predicateForEvents` — the OS handles recurrence expansion). iOS quirks documented in code:
+  no per-calendar sync state exposed (we surface all; Events is source-of-truth anyway),
+  all-day events are local-midnight, `eventId` carries `calendarItemIdentifier|beginMs` to keep
+  uids stable for recurring instances.
+- **Quick actions** (iOS's “shortcuts”): static `UIApplicationShortcutItems` in Info.plist —
+  “New task” (`plus.circle`) and “Sync now” (`arrow.triangle.2.circlepath`). Routed through
+  SceneDelegate → `daydeck/input` channel → the existing Dart router (add_task / sync_now).
+  Cold start rides `getInitialInput`; warm taps ride `nativeInput`. Same contract as Android.
+- **Share → task is ABSENT on iOS for now** — Share Extensions are a separate Xcode target
+  with their own provisioning profile; not wired blind (free signing supports it, it’s just
+  work). Will come with the widget wave if wanted. Android share keeps working.
+- **Widget (home screen) DEFERRED to v1.1** — WidgetKit extension target; not editable blind.
+  `home_widget_bridge.dart` now no-ops off Android.
+- **Notifications (Dart)**: `ReminderService` now initialises iOS (Darwin settings + the
+  `evening` category with a foreground SNOOZE 30 MIN action), requests permission via
+  IOSFlutterLocalNotificationsPlugin, and includes `iOS: DarwinNotificationDetails()` on every
+  scheduled notification. Android path untouched. `_darwinEveningCategory` is `final` (the
+  factory isn’t const).
+- **Permissions** (Info.plist): `NSCalendarsFullAccessUsageDescription` (iOS 17+),
+  `NSCalendarsUsageDescription` (≤16), `NSFaceIDUsageDescription` (required by local_auth —
+  the app crashes on Face ID prompt without it).
+- **iOS-only settings seam**: DEVICE CALENDAR section now renders on iOS too (hidden on web),
+  with iPhone copy: permission nudge points at Settings → Privacy & Security → Calendars;
+  tip row points at Settings → Calendar → Accounts → tick the shared calendar.
+- **CI**: new `build-ios` job in release.yml — macos-15, Flutter 3.47.9, analyze + test +
+  `flutter build ios --release --no-codesign`. Compile gate only; no signing, no artifact.
+  APK path untouched. Manual dispatch builds now exercise both jobs.
+- analyze clean; 37/37 tests green; web build rebuilt (PWA users unaffected).
+
+### iOS runbook (owner, on the Mac)
+1. Clone/pull dashboard-app. Install Flutter 3.47.9 stable + Xcode from the Mac App Store
+   (free Apple ID is enough — no $99 membership needed).
+2. `cd dashboard-app && flutter pub get && cd ios && pod install` (pod install is run
+   automatically by flutter build on macOS; run it once by hand to be safe).
+3. Open `ios/Runner.xcworkspace` in Xcode (NOT the .xcodeproj).
+4. Runner target → Signing & Capabilities → Team → your personal team
+   (Xcode → Settings → Accounts → sign in with your Apple ID if missing). Keep
+   “Automatically manage signing” ON. Bundle id stays `io.github.theswagindisguise.daydeck`
+   (if Xcode says it’s taken — unlikely for a personal id — append `.free`).
+5. iPhone: Settings → Privacy & Security → **Developer Mode** → ON (reboot). Plug in via
+   cable, select the iPhone as run destination, hit **Run**.
+6. First launch: iOS → Settings → General → VPN & Device Management → trust your developer
+   certificate. Accept the calendar + notification prompts.
+7. **Every 7 days**: open the project on the Mac → Run again (signature renewed). That’s the
+   cost of free sideloading; the app itself never stops working until it expires, then just
+   won’t launch until re-signed.
+8. Optional convenience: SideStore re-signs automatically over Wi-Fi — evaluate later; the
+   Xcode re-run is the reliable path.
+
+### What’s deliberately NOT on iOS yet (honest list)
+- Home-screen widget (WidgetKit + App Group target — v1.1), Share → task via Share Extension,
+  Control Center tile (no Android QS equivalent), app-lock parity checks (Face ID path is
+  wired but untested pre-sideload), "view-only calendar chips" wording (still says google
+  calendar — accurate for synced Google calendars).
+
+### Known risks / watch items
+- `windowScene(_:performActionFor:completionHandler:)` in SceneDelegate is implemented WITHOUT
+  `override` — Flutter's SceneDelegate doesn't implement it. If a future Flutter changes that,
+  the build breaks loudly (missing override) — cheap fix.
+- `super.scene(scene, willConnectTo:…)` must stay: Flutter builds the window there.
+- iOS memory: Flutter iOS engine + plugins are fine on any A14+ device.
 
 ## Phase 7 — Z Fold 5 inner-display layout — v0.7.0 (2026-11-10)
 

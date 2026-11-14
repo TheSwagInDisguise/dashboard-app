@@ -1,8 +1,10 @@
 name: release
 
-# Builds a signed release APK and publishes it to GitHub Releases whenever a
-# version tag (vX.Y.Z) is pushed. Also runs on manual dispatch so the build
-# can be exercised without cutting a release.
+# Builds a signed release APK and compile-checks the iOS app whenever a
+# version tag (vX.Y.Z) is pushed. APK is published to GitHub Releases. The
+# iOS job is a compile gate only — DayDeck ships on iPhone via free Apple ID
+# sideloading from the owner's Mac (see PROJECT_NOTES.md#phase-10). Also runs
+# on manual dispatch so the build can be exercised without cutting a release.
 on:
   push:
     tags:
@@ -87,3 +89,34 @@ jobs:
           name: daydeck-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 14
+
+  build-ios:
+    # Compile gate for the iOS target. No code signing happens here — the
+    # owner sideloads the app with a free Apple ID on their Mac (7-day
+    # provisioning profile). This job proves the Swift and the Flutter iOS
+    # build compile on every tag.
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Flutter (3.47.9 stable — same version used in local dev)
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          channel: stable
+          cache: true
+
+      - name: Dependencies
+        run: flutter pub get
+
+      - name: Analyze (iOS toolchain sanity)
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build iOS (no codesign — compile only)
+        run: flutter build ios --release --no-codesign
+

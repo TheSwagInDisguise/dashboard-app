@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -21,6 +22,21 @@ import 'deep_links.dart';
 class ReminderService {
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _ready = false;
+
+  /// iOS notification categories: evening check offers SNOOZE inline.
+  static final _darwinEveningCategory = DarwinNotificationCategory(
+    'evening',
+    actions: [
+      DarwinNotificationAction.plain(
+        'snooze30',
+        'SNOOZE 30 MIN',
+        options: {DarwinNotificationActionOption.foreground},
+      ),
+    ],
+  );
+
+  static bool get _isAndroid => !kIsWeb && Platform.isAndroid;
+  static bool get _isIOS => !kIsWeb && Platform.isIOS;
 
   static const int _eveningId = 2030; // 20:30 — the default hour
   static const int _snoozeId = 2031; // one-shot snooze from the evening check
@@ -63,7 +79,10 @@ class ReminderService {
         'daydeck · evening check (snoozed)',
         'Any shared events still waiting to make it into Google Calendar?',
         scheduled,
-        const NotificationDetails(android: androidDetails),
+        const NotificationDetails(
+          android: androidDetails,
+          iOS: DarwinNotificationDetails(categoryIdentifier: 'evening'),
+        ),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       );
     } catch (_) {}
@@ -77,8 +96,14 @@ class ReminderService {
       tz.setLocalLocation(tz.getLocation(localName));
 
       const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      final darwinSettings = DarwinInitializationSettings(
+        requestAlertPermission: false, // permission requested explicitly in ensurePermission
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+        notificationCategories: [_darwinEveningCategory],
+      );
       await _plugin.initialize(
-        const InitializationSettings(android: androidSettings),
+        InitializationSettings(android: androidSettings, iOS: darwinSettings),
         onDidReceiveNotificationResponse: (response) {
           if (response.actionId == 'snooze30') {
             unawaited(_snoozeEveningCheck());
@@ -89,7 +114,9 @@ class ReminderService {
         onDidReceiveBackgroundNotificationResponse: ReminderService.backgroundNotificationResponse,
       );
 
-      final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      final android = _isAndroid
+          ? _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          : null;
       await android?.createNotificationChannel(const AndroidNotificationChannel(
         _eveningChannelId,
         _eveningChannelName,
@@ -112,6 +139,12 @@ class ReminderService {
   Future<void> ensurePermission() async {
     if (kIsWeb || !_ready) return;
     try {
+      if (_isIOS) {
+        await _plugin
+            .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+            ?.requestPermissions(alert: true, badge: true, sound: true);
+        return;
+      }
       await _plugin
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
           ?.requestNotificationsPermission();
@@ -147,6 +180,7 @@ class ReminderService {
               AndroidNotificationAction('snooze30', '30 MIN', cancelNotification: true),
             ],
           ),
+          iOS: DarwinNotificationDetails(categoryIdentifier: 'evening'),
         ),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         matchDateTimeComponents: DateTimeComponents.time,
@@ -172,6 +206,7 @@ class ReminderService {
             importance: Importance.defaultImportance,
             priority: Priority.defaultPriority,
           ),
+          iOS: DarwinNotificationDetails(categoryIdentifier: 'evening'),
         ),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         payload: 'shared_queue',
@@ -232,6 +267,7 @@ class ReminderService {
               importance: Importance.high,
               priority: Priority.high,
             ),
+            iOS: DarwinNotificationDetails(),
           ),
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
           payload: 'task:${entry.key}',

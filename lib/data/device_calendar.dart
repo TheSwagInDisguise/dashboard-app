@@ -38,8 +38,8 @@ class DeviceCalendarInfo {
 class DeviceCalendarReader {
   static const MethodChannel _channel = MethodChannel('daydeck/devicecal');
 
-  /// True on Android (where CalendarContract exists) and false everywhere else.
-  static bool get isSupported => !kIsWeb && Platform.isAndroid;
+  /// True on Android (CalendarContract) and iOS (EventKit); false on web.
+  static bool get isSupported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
   static Future<bool> checkPermission() async {
     if (!isSupported) return false;
