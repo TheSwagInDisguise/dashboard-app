@@ -19,9 +19,9 @@ class SceneDelegate: FlutterSceneDelegate {
     }
   }
 
-  // No `override`: Flutter's delegate doesn't implement this; Swift treats it
-  // as satisfying the scene protocol's optional requirement.
-  func windowScene(
+  // Flutter's FlutterSceneLifeCycleDelegate does implement this (the protocol
+  // lists it), so `override` is required — caught by the CI iOS compile gate.
+  override func windowScene(
     _ windowScene: UIWindowScene,
     performActionFor shortcutItem: UIApplicationShortcutItem,
     completionHandler: @escaping (Bool) -> Void
