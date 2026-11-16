@@ -304,7 +304,7 @@ class _HabitHit extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: () async {
-        await store.toggleOn(habit.id);
+        await store.toggle(habit.id);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(doneToday ? 'unchecked for today' : 'checked off today ✓')),

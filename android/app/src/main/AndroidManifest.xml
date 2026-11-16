@@ -10,6 +10,11 @@
     <!-- Device calendar, read-only (sync of shared calendars with no iCal link).
          Events are only read on-device; nothing is uploaded. -->
     <uses-permission android:name="android.permission.READ_CALENDAR"/>
+    <!-- Take/choose watch photos (stored on-device only). -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Silence notifications (DND) during focus sessions — only active after
+         the user grants notification-policy access in system settings. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"/>
     <application
         android:label="DayDeck"
         android:name="${applicationName}"

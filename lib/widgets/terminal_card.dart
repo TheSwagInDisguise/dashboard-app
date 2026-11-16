@@ -19,7 +19,13 @@ class TerminalCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: palette.border),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+      // A transparent Material so ListTile ink splashes have somewhere to
+      // paint (the Container above hides ink from outer Material ancestors).
+      child: Material(
+        type: MaterialType.transparency,
+        borderRadius: BorderRadius.circular(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+      ),
     );
   }
 }

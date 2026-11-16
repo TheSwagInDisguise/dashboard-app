@@ -1,8 +1,10 @@
 import 'dart:convert';
 
-import '../models/habit.dart';
 import '../models/event.dart';
+import '../models/focus_session.dart';
+import '../models/habit.dart';
 import '../models/task.dart';
+import '../models/watch.dart';
 
 /// Pure merge logic for the sync engine — last-write-wins per item with a
 /// deterministic tiebreak, and every losing version collected so nothing is
@@ -124,8 +126,63 @@ bool eventSemanticallyDifferent(Event a, Event b) {
       a.deleted != b.deleted;
 }
 
-bool habitSemanticallyDifferent(Habit a, Habit b) =>
-    a.title != b.title || a.cadence != b.cadence || a.deleted != b.deleted;
+bool habitSemanticallyDifferent(Habit a, Habit b) {
+  // Compare the canonical sync payload (photo-free by construction).
+  Map<String, dynamic> flat(Habit h) {
+    final m = Map<String, dynamic>.from(h.toJson())..remove('createdAt')..remove('updatedAt');
+    return m;
+  }
 
-bool habitLogSemanticallyDifferent(HabitLog a, HabitLog b) =>
-    a.done != b.done || a.deleted != b.deleted;
+  return jsonEncode(flat(a)) != jsonEncode(flat(b));
+}
+
+bool habitLogSemanticallyDifferent(HabitLog a, HabitLog b) {
+  final ja = a.toJson()..remove('createdAt')..remove('updatedAt')..remove('date');
+  final jb = b.toJson()..remove('createdAt')..remove('updatedAt')..remove('date');
+  return jsonEncode(ja) != jsonEncode(jb);
+}
+
+bool routineSemanticallyDifferent(Routine a, Routine b) =>
+    a.name != b.name || a.icon != b.icon || a.position != b.position || a.deleted != b.deleted;
+
+bool skipRuleSemanticallyDifferent(SkipRule a, SkipRule b) =>
+    a.name != b.name ||
+    a.kind != b.kind ||
+    a.fromDay != b.fromDay ||
+    a.toDay != b.toDay ||
+    a.weekdayMask != b.weekdayMask ||
+    a.habitIds != b.habitIds ||
+    a.enabled != b.enabled ||
+    a.deleted != b.deleted;
+
+bool shieldUseSemanticallyDifferent(ShieldUse a, ShieldUse b) =>
+    a.habitId != b.habitId || a.day != b.day || a.deleted != b.deleted;
+
+bool xpEventSemanticallyDifferent(XpEvent a, XpEvent b) =>
+    a.day != b.day || a.amount != b.amount || a.reason != b.reason || a.habitId != b.habitId || a.deleted != b.deleted;
+
+bool focusSessionSemanticallyDifferent(FocusSession a, FocusSession b) =>
+    a.habitId != b.habitId ||
+    a.day != b.day ||
+    a.startedAt != b.startedAt ||
+    a.endedAt != b.endedAt ||
+    a.minutes != b.minutes ||
+    a.kind != b.kind ||
+    a.completed != b.completed ||
+    a.deleted != b.deleted;
+
+bool watchSemanticallyDifferent(Watch a, Watch b) =>
+    a.brand != b.brand ||
+    a.model != b.model ||
+    a.nickname != b.nickname ||
+    a.reference != b.reference ||
+    a.movement != b.movement ||
+    a.caseSizeMm != b.caseSizeMm ||
+    a.color != b.color ||
+    a.notes != b.notes ||
+    a.status != b.status ||
+    a.archived != b.archived ||
+    a.deleted != b.deleted;
+
+bool wearLogSemanticallyDifferent(WearLog a, WearLog b) =>
+    a.watchId != b.watchId || a.day != b.day || a.note != b.note || a.deleted != b.deleted;

@@ -167,6 +167,42 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
   }
 
+  // ---- profile / whoami --------------------------------------------------
+  String get username {
+    final v = _prefs?.getString('username')?.trim() ?? '';
+    return v.isEmpty ? 'me' : v;
+  }
+
+  Future<void> setUsername(String value) async {
+    try {
+      await _prefs?.setString('username', value.trim());
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  // ---- focus / pomodoro defaults -----------------------------------------
+  int get focusDefaultMinutes => _prefs?.getInt('focus_minutes_default') ?? 25;
+  int get breakDefaultMinutes => _prefs?.getInt('break_minutes_default') ?? 5;
+
+  /// Android only: silence notifications (DND) while a focus session runs.
+  /// iOS has no equivalent — the toggle is ignored there.
+  bool get dndDuringFocus => _prefs?.getBool('dnd_during_focus') ?? true;
+
+  Future<void> setFocusDefaults({int? focus, int? breaks}) async {
+    try {
+      if (focus != null) await _prefs?.setInt('focus_minutes_default', focus.clamp(1, 180));
+      if (breaks != null) await _prefs?.setInt('break_minutes_default', breaks.clamp(1, 60));
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<void> setDndDuringFocus(bool value) async {
+    try {
+      await _prefs?.setBool('dnd_during_focus', value);
+    } catch (_) {}
+    notifyListeners();
+  }
+
   // ---- GitHub sync token (stored only on this device) -------------------
   bool get tokenConfigured => (_githubToken?.isNotEmpty ?? false);
 

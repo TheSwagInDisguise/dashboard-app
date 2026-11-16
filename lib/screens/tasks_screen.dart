@@ -49,7 +49,6 @@ class TasksScreen extends StatelessWidget {
     final store = context.watch<TasksStore>();
     final openTasks = store.openTasks;
     final doneTasks = store.doneTasks;
-    final wide = MediaQuery.sizeOf(context).width >= 700;
 
     final header = Row(
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -164,27 +163,11 @@ class TasksScreen extends StatelessWidget {
         const SizedBox(height: 4),
         stats,
         const SizedBox(height: 14),
-        if (!wide) ...[
-          ...openBlock,
-          if (doneTasks.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            ...doneBlock,
-          ],
-        ] else
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 7,
-                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: openBlock),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                flex: 6,
-                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: doneBlock),
-              ),
-            ],
-          ),
+        ...openBlock,
+        if (doneTasks.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          ...doneBlock,
+        ],
         const SizedBox(height: 12),
         Text(
           'stored locally · synced to your private GitHub repo',

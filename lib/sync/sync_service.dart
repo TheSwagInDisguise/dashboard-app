@@ -5,12 +5,16 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/event.dart';
+import '../models/focus_session.dart';
 import '../models/habit.dart';
 import '../models/task.dart';
+import '../models/watch.dart';
 import '../state/app_state.dart';
 import '../state/event_store.dart';
+import '../state/focus_store.dart';
 import '../state/habit_store.dart';
 import '../state/tasks_store.dart';
+import '../state/watch_store.dart';
 import 'github_client.dart';
 import 'merger.dart';
 
@@ -79,10 +83,14 @@ class SyncService extends ChangeNotifier {
     required TasksStore tasksStore,
     required EventStore eventStore,
     required HabitStore habitStore,
+    required WatchStore watchStore,
+    required FocusStore focusStore,
     required AppState appState,
   })  : _tasks = tasksStore,
         _events = eventStore,
         _habits = habitStore,
+        _watches = watchStore,
+        _focus = focusStore,
         _appState = appState {
     _docs = <_Doc<dynamic>>[
       _Doc<Task>(
@@ -137,11 +145,104 @@ class SyncService extends ChangeNotifier {
         idOf: (l) => l.id,
         titleOf: (l) => 'check-in on ${l.date}',
       ),
+      _Doc<Routine>(
+        path: 'routines.json',
+        displayName: 'routines',
+        snapshot: habitStore.snapshotRoutines,
+        apply: habitStore.replaceAllRoutines,
+        fromJson: Routine.fromJson,
+        toJson: (r) => r.toJson(),
+        semanticallyDifferent: routineSemanticallyDifferent,
+        updatedAtOf: (r) => r.updatedAt,
+        createdAtOf: (r) => r.createdAt,
+        idOf: (r) => r.id,
+        titleOf: (r) => r.name,
+      ),
+      _Doc<SkipRule>(
+        path: 'skip_rules.json',
+        displayName: 'skip rules',
+        snapshot: habitStore.snapshotSkipRules,
+        apply: habitStore.replaceAllSkipRules,
+        fromJson: SkipRule.fromJson,
+        toJson: (r) => r.toJson(),
+        semanticallyDifferent: skipRuleSemanticallyDifferent,
+        updatedAtOf: (r) => r.updatedAt,
+        createdAtOf: (r) => r.createdAt,
+        idOf: (r) => r.id,
+        titleOf: (r) => r.name,
+      ),
+      _Doc<ShieldUse>(
+        path: 'shield_uses.json',
+        displayName: 'streak shields',
+        snapshot: habitStore.snapshotShields,
+        apply: habitStore.replaceAllShields,
+        fromJson: ShieldUse.fromJson,
+        toJson: (x) => x.toJson(),
+        semanticallyDifferent: shieldUseSemanticallyDifferent,
+        updatedAtOf: (x) => x.updatedAt,
+        createdAtOf: (x) => x.createdAt,
+        idOf: (x) => x.id,
+        titleOf: (x) => 'shield on ${x.day}',
+      ),
+      _Doc<XpEvent>(
+        path: 'xp_events.json',
+        displayName: 'xp ledger',
+        snapshot: habitStore.snapshotXp,
+        apply: habitStore.replaceAllXp,
+        fromJson: XpEvent.fromJson,
+        toJson: (x) => x.toJson(),
+        semanticallyDifferent: xpEventSemanticallyDifferent,
+        updatedAtOf: (x) => x.updatedAt,
+        createdAtOf: (x) => x.createdAt,
+        idOf: (x) => x.id,
+        titleOf: (x) => '${x.amount} xp · ${x.reason}',
+      ),
+      _Doc<Watch>(
+        path: 'watches.json',
+        displayName: 'watches',
+        snapshot: watchStore.snapshotWatches,
+        apply: watchStore.replaceAllWatches,
+        fromJson: Watch.fromJson,
+        toJson: (w) => w.toJson(),
+        semanticallyDifferent: watchSemanticallyDifferent,
+        updatedAtOf: (w) => w.updatedAt,
+        createdAtOf: (w) => w.createdAt,
+        idOf: (w) => w.id,
+        titleOf: (w) => w.displayName,
+      ),
+      _Doc<WearLog>(
+        path: 'wear_logs.json',
+        displayName: 'watch wears',
+        snapshot: watchStore.snapshotWears,
+        apply: watchStore.replaceAllWears,
+        fromJson: WearLog.fromJson,
+        toJson: (w) => w.toJson(),
+        semanticallyDifferent: wearLogSemanticallyDifferent,
+        updatedAtOf: (w) => w.updatedAt,
+        createdAtOf: (w) => w.createdAt,
+        idOf: (w) => w.id,
+        titleOf: (w) => 'wear on ${w.toJson()['date']}',
+      ),
+      _Doc<FocusSession>(
+        path: 'focus_sessions.json',
+        displayName: 'focus sessions',
+        snapshot: focusStore.snapshotSessions,
+        apply: focusStore.replaceAllSessions,
+        fromJson: FocusSession.fromJson,
+        toJson: (s) => s.toJson(),
+        semanticallyDifferent: focusSessionSemanticallyDifferent,
+        updatedAtOf: (s) => s.updatedAt,
+        createdAtOf: (s) => s.createdAt,
+        idOf: (s) => s.id,
+        titleOf: (s) => '${s.minutes} min ${s.kind}',
+      ),
     ];
 
     _tasks.addListener(_handleLocalMutation);
     _events.addListener(_handleLocalMutation);
     _habits.addListener(_handleLocalMutation);
+    _watches.addListener(_handleLocalMutation);
+    _focus.addListener(_handleLocalMutation);
     _appState.addListener(_handleStateMutation);
     _lastSeenToken = appState.syncToken;
     if (_lastSeenToken == null) _status = SyncStatus.disabled;
@@ -155,6 +256,8 @@ class SyncService extends ChangeNotifier {
   final TasksStore _tasks;
   final EventStore _events;
   final HabitStore _habits;
+  final WatchStore _watches;
+  final FocusStore _focus;
   final AppState _appState;
 
   late final List<_Doc<dynamic>> _docs;
@@ -400,11 +503,85 @@ class SyncService extends ChangeNotifier {
           );
           return true;
         case 'habits.json':
-          final title = (map['title'] ?? '').toString().trim();
+          final title = (map['name'] ?? map['title'] ?? '').toString().trim();
           if (title.isEmpty) return false;
-          await _habits.addHabit(
+          await _habits.addHabitRaw(
             title: title,
-            cadence: (map['cadence'] ?? 'daily').toString(),
+            cadence: (map['cadence'] ?? (map['schedule'] == 'weekly' ? 'weekly' : 'daily')).toString(),
+          );
+          return true;
+        case 'routines.json':
+          final name = (map['name'] ?? '').toString().trim();
+          if (name.isEmpty) return false;
+          await _habits.addRoutine(name: name, icon: (map['icon'] ?? '>').toString());
+          return true;
+        case 'skip_rules.json':
+          final name = (map['name'] ?? '').toString().trim();
+          if (name.isEmpty) return false;
+          final now = DateTime.now().toUtc();
+          await _habits.addSkipRule(SkipRule(
+            id: 'conflict', // addSkipRule re-ids
+            name: name,
+            kind: (map['kind'] ?? SkipRule.kindRange).toString(),
+            fromDay: (map['fromDay'] as num?)?.toInt(),
+            toDay: (map['toDay'] as num?)?.toInt(),
+            weekdayMask: (map['weekdayMask'] as num?)?.toInt() ?? 0,
+            habitIds: (map['habitIds'] ?? '').toString(),
+            enabled: map['enabled'] != false,
+            createdAt: now,
+            updatedAt: now,
+          ));
+          return true;
+        case 'shield_uses.json':
+          final habitId = map['habitId']?.toString() ?? '';
+          final day = (map['day'] as num?)?.toInt();
+          if (habitId.isEmpty || day == null) return false;
+          await _habits.addShieldUseRaw(habitId: habitId, day: day);
+          return true;
+        case 'xp_events.json':
+          final day = (map['day'] as num?)?.toInt();
+          final amount = (map['amount'] as num?)?.toInt() ?? 0;
+          if (day == null || amount == 0) return false;
+          await _habits.addXpRaw(
+            day: day,
+            amount: amount,
+            reason: (map['reason'] ?? 'complete').toString(),
+            habitId: (map['habitId'] ?? '0').toString(),
+          );
+          return true;
+        case 'watches.json':
+          final model = (map['model'] ?? '').toString().trim();
+          if (model.isEmpty) return false;
+          await _watches.addWatch(
+            brand: (map['brand'] ?? '').toString(),
+            model: model,
+            nickname: (map['nickname'] ?? '').toString(),
+            reference: (map['reference'] ?? '').toString(),
+            movement: (map['movement'] ?? '').toString(),
+            caseSizeMm: (map['caseSizeMm'] as num?)?.toDouble(),
+            color: (map['color'] ?? 'cyan').toString(),
+            status: (map['status'] ?? Watch.statusOwned).toString(),
+            notes: (map['notes'] ?? '').toString(),
+          );
+          return true;
+        case 'wear_logs.json':
+          final watchId = map['watchId']?.toString() ?? '';
+          final day = (map['day'] as num?)?.toInt();
+          if (watchId.isEmpty || day == null) return false;
+          await _watches.addWearRaw(watchId: watchId, day: day, note: (map['note'] ?? '').toString());
+          return true;
+        case 'focus_sessions.json':
+          final minutes = (map['minutes'] as num?)?.toInt() ?? 0;
+          final startedAt = (map['startedAt'] as num?)?.toInt();
+          final endedAt = (map['endedAt'] as num?)?.toInt();
+          if (minutes < 1 || startedAt == null || endedAt == null) return false;
+          await _focus.recordSession(
+            habitId: (map['habitId'] ?? '0').toString(),
+            startedAt: DateTime.fromMillisecondsSinceEpoch(startedAt, isUtc: true),
+            endedAt: DateTime.fromMillisecondsSinceEpoch(endedAt, isUtc: true),
+            minutes: minutes,
+            kind: (map['kind'] ?? FocusSession.kindFocus).toString(),
+            completed: map['completed'] != false,
           );
           return true;
         default:

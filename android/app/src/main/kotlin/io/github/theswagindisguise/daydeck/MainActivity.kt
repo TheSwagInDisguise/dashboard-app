@@ -2,10 +2,13 @@ package io.github.theswagindisguise.daydeck
 
 import android.Manifest
 import android.app.Activity
+import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.provider.CalendarContract
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -25,6 +28,7 @@ class MainActivity : FlutterActivity() {
     companion object {
         const val CHANNEL = "daydeck/input"
         const val DEVICE_CAL_CHANNEL = "daydeck/devicecal"
+        const val DND_CHANNEL = "daydeck/dnd"
         const val CAL_PERMISSION_REQUEST = 7701
         const val ACTION_ADD_TASK = "io.github.theswagindisguise.daydeck.ADD_TASK"
         const val ACTION_SYNC_NOW = "io.github.theswagindisguise.daydeck.SYNC_NOW"
@@ -57,6 +61,26 @@ class MainActivity : FlutterActivity() {
                     val input = pendingFromIntent ?: consumePendingInput()
                     pendingFromIntent = null
                     result.success(input)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // Focus-session Do Not Disturb. Android only, and ONLY while the
+        // user has granted notification-policy access (we never request it
+        // silently — Settings → FOCUS explains how to grant it).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DND_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "enable" -> result.success(setDnd(true))
+                "disable" -> result.success(setDnd(false))
+                "canManage" -> result.success(notificationManager.isNotificationPolicyAccessGranted)
+                "openAccessSettings" -> {
+                    try {
+                        startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
                 }
                 else -> result.notImplemented()
             }
@@ -209,6 +233,37 @@ class MainActivity : FlutterActivity() {
         pendingInput = input
         flutterEngine?.let { engine ->
             MethodChannel(engine.dartExecutor.binaryMessenger, CHANNEL).invokeMethod("nativeInput", input)
+        }
+    }
+
+    private val notificationManager: NotificationManager
+        get() = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+
+    /// Returns true when the filter actually changed (or stayed) as asked.
+    /// Returns false when access has not been granted — the Dart side treats
+    /// that as "no DND, carry on with plain notifications".
+    private fun setDnd(enable: Boolean): Boolean {
+        return try {
+            if (!notificationManager.isNotificationPolicyAccessGranted) {
+                // Nudge the user toward the grant screen; never crash the session.
+                if (enable) {
+                    try {
+                        startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                    } catch (_: Exception) { /* no settings activity? fine */ }
+                }
+                return false
+            }
+            val target = if (enable) {
+                NotificationManager.INTERRUPTION_FILTER_NONE
+            } else {
+                NotificationManager.INTERRUPTION_FILTER_ALL
+            }
+            if (notificationManager.currentInterruptionFilter != target) {
+                notificationManager.setInterruptionFilter(target)
+            }
+            true
+        } catch (_: Exception) {
+            false
         }
     }
 

@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../models/habit.dart';
 import '../models/task.dart';
 import 'deep_links.dart';
 
@@ -129,6 +130,18 @@ class ReminderService {
         description: 'One-off nudges for tasks you asked to be reminded about',
         importance: Importance.high,
       ));
+      await android?.createNotificationChannel(const AndroidNotificationChannel(
+        _focusChannelId,
+        _focusChannelName,
+        description: 'Focus session finished',
+        importance: Importance.defaultImportance,
+      ));
+      await android?.createNotificationChannel(const AndroidNotificationChannel(
+        _habitChannelId,
+        _habitChannelName,
+        description: 'Your habits at the time you asked for them',
+        importance: Importance.defaultImportance,
+      ));
       _ready = true;
     } catch (_) {
       _ready = false;
@@ -152,8 +165,9 @@ class ReminderService {
   }
 
   /// Schedules (or re-schedules) the repeating evening check. Tap = SHARED
-  /// queue; SNOOZE action = one-off nudge 30 minutes later.
-  Future<void> scheduleEveningCheck(int minutesOfDay) async {
+  /// queue; SNOOZE action = one-off nudge 30 minutes later. [checkInHabits]
+  /// lists unlogged check-in habits whose names are appended to the body.
+  Future<void> scheduleEveningCheck(int minutesOfDay, {List<String> checkInHabits = const []}) async {
     if (kIsWeb || !_ready) return;
     try {
       await _plugin.cancel(_eveningId);
@@ -164,10 +178,15 @@ class ReminderService {
       var scheduled = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
       if (!scheduled.isAfter(now)) scheduled = scheduled.add(const Duration(days: 1));
 
+      final pending = checkInHabits.take(3).map((n) => n.trim()).where((n) => n.isNotEmpty).toList();
+      final suffix = pending.isEmpty
+          ? ''
+          : '\nday not closed: ${pending.join(', ')}${checkInHabits.length > 3 ? '…' : ''}';
+
       await _plugin.zonedSchedule(
         _eveningId,
         'daydeck · evening check',
-        'Any shared events still waiting to make it into Google Calendar?',
+        'Any shared events still waiting to make it into Google Calendar?${suffix.isEmpty ? '' : suffix}',
         scheduled,
         const NotificationDetails(
           android: AndroidNotificationDetails(
@@ -210,6 +229,159 @@ class ReminderService {
         ),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         payload: 'shared_queue',
+      );
+    } catch (_) {}
+  }
+
+  // ---------------- focus (pomodoro) ----------------
+
+  static const int _focusDoneId = 2040;
+  static const String _focusChannelId = 'daydeck_focus';
+  static const String _focusChannelName = 'Focus sessions';
+  static const String _habitChannelId = 'daydeck_habits';
+  static const String _habitChannelName = 'Habit reminders';
+  static const int _habitSeqStart = 6000;
+  static const int _anchorSeqStart = 7000;
+  static const int _anchorWrap = 90; // 7000..7090 anchor-nudge id ring
+  static const String _habitMapKey = 'habit_reminder_map'; // habitId -> notifId
+  static const String _habitAtKey = 'habit_reminder_at'; // habitId -> minutesOfDay
+  static const String _habitSeqKey = 'habit_reminder_seq';
+
+  /// Schedule a one-shot "focus is done" notification at [when]. Any previous
+  /// focus notification is replaced. iOS gets the same plain local notification
+  /// (no DND / Live Activity integration).
+  Future<void> scheduleFocusDone(DateTime when, {required String habitName}) async {
+    if (kIsWeb || !_ready) return;
+    try {
+      await _plugin.cancel(_focusDoneId);
+      final at = tz.TZDateTime.from(when.toLocal(), tz.local);
+      if (!at.isAfter(tz.TZDateTime.now(tz.local))) return;
+
+      await _plugin.zonedSchedule(
+        _focusDoneId,
+        'daydeck · focus done',
+        habitName.isEmpty ? 'time’s up — take the break.' : 'done with $habitName — take the break.',
+        at,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _focusChannelId,
+            _focusChannelName,
+            channelDescription: 'Focus session finished',
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority,
+          ),
+          iOS: DarwinNotificationDetails(),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: 'focus',
+      );
+    } catch (_) {}
+  }
+
+  Future<void> cancelFocusDone() async {
+    if (kIsWeb || !_ready) return;
+    try {
+      await _plugin.cancel(_focusDoneId);
+    } catch (_) {}
+  }
+
+  // ---------------- per-habit reminders ----------------
+
+  /// Reconciles scheduled daily reminders with the habit list (reminderMinutes
+  /// >= 0). Called on every habit-store change; cheap when nothing moved.
+  Future<void> syncHabitReminders(List<Habit> habits) async {
+    if (kIsWeb || !_ready) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final map = _readIntMap(prefs.getString(_habitMapKey));
+      final at = _readIntMap(prefs.getString(_habitAtKey));
+
+      final desired = <String, int>{};
+      for (final h in habits) {
+        if (h.deleted || h.archived) continue;
+        if (h.reminderMinutes >= 0) desired[h.id] = h.reminderMinutes;
+      }
+
+      // Cancel reminders for habits that no longer want one.
+      for (final entry in {...map}.entries) {
+        if (!desired.containsKey(entry.key)) {
+          await _plugin.cancel(entry.value);
+          map.remove(entry.key);
+          at.remove(entry.key);
+        }
+      }
+
+      var seq = prefs.getInt(_habitSeqKey) ?? _habitSeqStart;
+      var nameById = <String, String>{for (final h in habits) h.id: h.name};
+      for (final entry in desired.entries) {
+        if (at[entry.key] == entry.value && map.containsKey(entry.key)) continue; // unchanged
+        var notifId = map[entry.key];
+        if (notifId == null) {
+          notifId = seq;
+          seq += 1;
+          map[entry.key] = notifId;
+        }
+        await _plugin.cancel(notifId);
+        final hour = entry.value ~/ 60;
+        final minute = entry.value % 60;
+        final nowTz = tz.TZDateTime.now(tz.local);
+        var scheduled = tz.TZDateTime(tz.local, nowTz.year, nowTz.month, nowTz.day, hour, minute);
+        if (!scheduled.isAfter(nowTz)) scheduled = scheduled.add(const Duration(days: 1));
+
+        await _plugin.zonedSchedule(
+          notifId,
+          'daydeck · habit',
+          _truncate(nameById[entry.key] ?? 'habit', 90),
+          scheduled,
+          const NotificationDetails(
+            android: AndroidNotificationDetails(
+              _habitChannelId,
+              _habitChannelName,
+              channelDescription: 'Your habits at the time you asked for them',
+              importance: Importance.defaultImportance,
+              priority: Priority.defaultPriority,
+            ),
+            iOS: DarwinNotificationDetails(),
+          ),
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          matchDateTimeComponents: DateTimeComponents.time,
+          payload: 'habits',
+        );
+        at[entry.key] = entry.value;
+      }
+
+      await prefs.setInt(_habitSeqKey, seq);
+      await prefs.setString(_habitMapKey, jsonEncode(map));
+      await prefs.setString(_habitAtKey, jsonEncode(at));
+    } catch (_) {}
+  }
+
+  /// One-shot nudge fired when a habit's anchor completes today
+  /// ("meditate done → journal?"). Uses a rotating id ring.
+  Future<void> showAnchorNudge(String habitName) async {
+    if (kIsWeb || !_ready) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final seq = prefs.getInt('anchor_nudge_seq') ?? 0;
+      final id = _anchorSeqStart + (seq % _anchorWrap);
+      await prefs.setInt('anchor_nudge_seq', seq + 1);
+      await _plugin.zonedSchedule(
+        id,
+        'daydeck · stacked habit',
+        'anchor done — ${_truncate(habitName, 80)} is up next',
+        tz.TZDateTime.now(tz.local).add(const Duration(seconds: 2)),
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _habitChannelId,
+            _habitChannelName,
+            channelDescription: 'Your habits at the time you asked for them',
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority,
+          ),
+          iOS: DarwinNotificationDetails(),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: 'habits',
       );
     } catch (_) {}
   }

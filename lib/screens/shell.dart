@@ -14,14 +14,19 @@ import '../theme/palettes.dart';
 import '../sync/sync_service.dart';
 import '../widgets/scanlines.dart';
 import '../widgets/task_sheet.dart';
+import 'focus_screen.dart';
 import 'habits_screen.dart';
+import 'profile_screen.dart';
 import 'settings_screen.dart';
 import 'tasks_screen.dart';
 import 'today_screen.dart';
+import 'watch_screen.dart';
+import '../state/pomodoro_timer.dart';
 
 /// App shell: holds the current tab, paints the CRT scanline overlay and the
 /// terminal-style bottom navigation. Content is capped at a comfortable
-/// reading width on larger screens (web / tablets).
+/// reading width; single column everywhere (foldable layout removed — iOS is the
+/// primary target now).
 class Shell extends StatefulWidget {
   const Shell({super.key});
 
@@ -78,10 +83,6 @@ class _TokenExpiredBanner extends StatelessWidget {
   }
 }
 
-/// Width at/above which fold/tablet layouts kick in (Fold 5 cover ≈ 360,
-/// inner ≈ 800+; phones sit below 700).
-const double _kWideBreakpoint = 700;
-
 class _ShellState extends State<Shell> with WidgetsBindingObserver {
   int _index = 0;
   bool _locked = false;
@@ -94,6 +95,9 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     (icon: Icons.today_outlined, label: 'TODAY'),
     (icon: Icons.checklist_rounded, label: 'TASKS'),
     (icon: Icons.repeat_rounded, label: 'HABITS'),
+    (icon: Icons.watch_later_outlined, label: 'WATCH'),
+    (icon: Icons.timer_outlined, label: 'FOCUS'),
+    (icon: Icons.person_outline, label: 'PROFILE'),
     (icon: Icons.settings_outlined, label: 'SETTINGS'),
   ];
 
@@ -103,6 +107,8 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     DeepLinks.tasksRequests.addListener(_onTasksDeepLink);
     DeepLinks.sharedQueueRequests.addListener(_onSharedQueueDeepLink);
+    DeepLinks.habitsRequests.addListener(_onHabitsDeepLink);
+    DeepLinks.focusRequests.addListener(_onFocusDeepLink);
     _channel.setMethodCallHandler(_onNativeCall);
     final store = context.read<TasksStore>();
     store.addListener(_onTasksStoreChanged);
@@ -119,6 +125,8 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     DeepLinks.tasksRequests.removeListener(_onTasksDeepLink);
     DeepLinks.sharedQueueRequests.removeListener(_onSharedQueueDeepLink);
+    DeepLinks.habitsRequests.removeListener(_onHabitsDeepLink);
+    DeepLinks.focusRequests.removeListener(_onFocusDeepLink);
     _channel.setMethodCallHandler(null);
     try {
       context.read<TasksStore>().removeListener(_onTasksStoreChanged);
@@ -133,6 +141,9 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     } else if (state == AppLifecycleState.resumed) {
       final away = _pausedAt == null ? Duration.zero : DateTime.now().difference(_pausedAt!);
       _pausedAt = null;
+      try {
+        context.read<PomodoroTimer>().appResumed();
+      } catch (_) {}
       final enabled = context.read<AppState>().appLockEnabled;
       if (enabled && !_locked && away > const Duration(seconds: 30)) {
         setState(() => _locked = true);
@@ -236,6 +247,14 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     if (mounted) setState(() => _index = 0);
   }
 
+  void _onHabitsDeepLink() {
+    if (mounted) setState(() => _index = 2);
+  }
+
+  void _onFocusDeepLink() {
+    if (mounted) setState(() => _index = 4);
+  }
+
   // ---------------- home-screen widget ----------------
 
   void _onTasksStoreChanged() {
@@ -258,14 +277,14 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
         child: Column(
           children: [
             if (sync.status == SyncStatus.tokenInvalid)
-              _TokenExpiredBanner(palette: palette, onFix: () => setState(() => _index = 3)),
+              _TokenExpiredBanner(palette: palette, onFix: () => setState(() => _index = 6)),
             Expanded(
               child: Stack(
                 children: [
                   Center(
                     child: ConstrainedBox(
                       constraints: BoxConstraints(
-                        maxWidth: MediaQuery.sizeOf(context).width >= _kWideBreakpoint ? 1180 : 640,
+                        maxWidth: 640,
                       ),
                       child: IndexedStack(
                         index: _index,
@@ -273,6 +292,9 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
                           TodayScreen(),
                           TasksScreen(),
                           HabitsScreen(),
+                          WatchScreen(),
+                          FocusScreen(),
+                          ProfileScreen(),
                           SettingsScreen(),
                         ],
                       ),
@@ -320,9 +342,8 @@ class _TerminalTabBar extends StatelessWidget {
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              // On fold/tablet widths, keep the tab cluster centred instead of
-              // stretching the tabs across the whole inner display. Padding is
-              // used (not Center) so the bar's height stays intrinsic.
+              // Keep the seven tabs centred at large widths instead of
+              // stretching across the whole row.
               const maxCluster = 640.0;
               final spare = (constraints.maxWidth - maxCluster) / 2;
               final inset = spare > 0 ? spare : 0.0;

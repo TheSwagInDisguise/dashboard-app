@@ -10,6 +10,12 @@
 	<string>DayDeck</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>daydeck locks itself with Face ID.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>daydeck saves watch photos you choose (profile shots and wrist shots). Photos stay on this iPhone — never uploaded, never synced.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>daydeck can take a watch photo with the camera. Photos stay on this iPhone — never uploaded, never synced.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>daydeck saves watch photos to your photo library when you ask it to.</string>
 	<!-- iOS 17+ -->
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>daydeck reads calendars synced to this iPhone — including your private shared calendar — to show them in your day. Read-only; events never leave the device.</string>

@@ -8,8 +8,13 @@ import 'notifications/reminder_service.dart';
 import 'screens/shell.dart';
 import 'state/app_state.dart';
 import 'state/event_store.dart';
+import 'state/focus_store.dart';
 import 'state/habit_store.dart';
+import 'state/pomodoro_timer.dart';
 import 'state/tasks_store.dart';
+import 'state/watch_photo_store.dart';
+import 'state/watch_store.dart';
+import 'models/habit.dart' show epochDayOf;
 import 'sync/sync_service.dart';
 import 'theme/app_theme.dart';
 
@@ -25,6 +30,12 @@ Future<void> main() async {
   await eventStore.load();
   final habitStore = HabitStore();
   await habitStore.load();
+  final watchStore = WatchStore();
+  await watchStore.load();
+  final watchPhotos = WatchPhotoStore();
+  await watchPhotos.load();
+  final focusStore = FocusStore();
+  await focusStore.load();
   final feed = CalendarFeed(appState: appState, eventStore: eventStore);
   await feed.loadCache();
 
@@ -32,6 +43,8 @@ Future<void> main() async {
     tasksStore: tasksStore,
     eventStore: eventStore,
     habitStore: habitStore,
+    watchStore: watchStore,
+    focusStore: focusStore,
     appState: appState,
   );
 
@@ -43,15 +56,49 @@ Future<void> main() async {
   tasksStore.addListener(() {
     unawaited(reminder.syncTaskReminders(tasksStore.snapshotItems()));
   });
+
+  final pomodoro = PomodoroTimer(
+    focusStore: focusStore,
+    habitStore: habitStore,
+    appState: appState,
+    reminders: reminder,
+  );
+
+  List<String> pendingCheckIns() {
+    return habitStore.habits
+        .where((h) => h.checkIn && !habitStore.isDoneToday(h) && !habitStore.skippedOn(h.id, epochDayOf(DateTime.now())))
+        .map((h) => h.name)
+        .toList();
+  }
+
+  unawaited(reminder.syncHabitReminders(habitStore.snapshotHabits()));
+  var lastDoneToday = <String>{};
+  habitStore.addListener(() {
+    unawaited(reminder.syncHabitReminders(habitStore.snapshotHabits()));
+    final doneNow = habitStore.habits.where(habitStore.isDoneToday).map((h) => h.id).toSet();
+    for (final h in habitStore.habits) {
+      final anchorId = h.anchorId;
+      if (anchorId != null &&
+          h.anchorRemind &&
+          !doneNow.contains(h.id) &&
+          doneNow.contains(anchorId) &&
+          !lastDoneToday.contains(anchorId)) {
+        // The habit this one is stacked on just completed — nudge.
+        unawaited(reminder.showAnchorNudge(h.name));
+      }
+    }
+    lastDoneToday = doneNow;
+    unawaited(reminder.scheduleEveningCheck(appState.reminderMinutes, checkInHabits: pendingCheckIns()));
+  });
   var lastReminderMinutes = appState.reminderMinutes;
   appState.addListener(() {
     final minutes = appState.reminderMinutes;
     if (minutes != lastReminderMinutes) {
       lastReminderMinutes = minutes;
-      unawaited(reminder.scheduleEveningCheck(minutes));
+      unawaited(reminder.scheduleEveningCheck(minutes, checkInHabits: pendingCheckIns()));
     }
   });
-  unawaited(reminder.scheduleEveningCheck(lastReminderMinutes));
+  unawaited(reminder.scheduleEveningCheck(lastReminderMinutes, checkInHabits: pendingCheckIns()));
 
   runApp(
     MultiProvider(
@@ -60,6 +107,10 @@ Future<void> main() async {
         ChangeNotifierProvider<TasksStore>.value(value: tasksStore),
         ChangeNotifierProvider<EventStore>.value(value: eventStore),
         ChangeNotifierProvider<HabitStore>.value(value: habitStore),
+        ChangeNotifierProvider<WatchStore>.value(value: watchStore),
+        ChangeNotifierProvider<WatchPhotoStore>.value(value: watchPhotos),
+        ChangeNotifierProvider<FocusStore>.value(value: focusStore),
+        ChangeNotifierProvider<PomodoroTimer>.value(value: pomodoro),
         ChangeNotifierProvider<CalendarFeed>.value(value: feed),
         ChangeNotifierProvider<SyncService>.value(value: sync),
       ],

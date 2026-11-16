@@ -5,7 +5,7 @@ The GitHub repos are the source of truth — workspace snapshots of `/home/user`
 `.git/` directories and executable bits, and exclude hidden dot-folders, so local copies may
 look broken but the pushed repos are never affected.
 
-_Last updated: 2026-11-10 (v0.10.0 — iOS port; iPhone is now the primary platform)_
+_Last updated: 2026-11-16 (v0.11.0 — PersonalTerminal port: habit engine v2, watches, focus, profile)_
 
 ---
 
@@ -388,7 +388,23 @@ search, widget and auto-close all work unchanged. **Nothing leaves the phone.**
 - CI does the compile; device behaviour ("shared calendar must be ticked on the phone")
   is the one thing CI can’t verify — owner is the tester again.
 
-## Phase 10 — iOS port (iPhone is primary now) — v0.10.0 (2026-11-10)
+## Session-start ritual (READ FIRST, future sessions)
+
+The arena workspace snapshot **does not persist `.git` or `.github`, and intermittently
+serves a stale, mixed file tree** (loses files created in later sessions, keeps newest
+version bump). It happened in v0.9.0→v0.10.0→this turn. The ONLY trustworthy source of
+truth is GitHub (public code repo). Start every session with:
+
+```
+git clone https://github.com/TheSwagInDisguise/dashboard-app /tmp/daydeck-restore   # with askpass
+cp -a /tmp/daydeck-restore/. /home/user/dashboard-app/                             # adds .git/.github/missing files
+cd /home/user/dashboard-app && git status                                          # expect clean
+# Flutter SDK also needs a re-clone + `flutter --version` (it re-downloads dart-sdk)
+```
+
+Never trust local files; verify `git log -1` == released tag before editing.
+
+## ## Phase 10 — iOS port (iPhone is primary now) — v0.10.0 (2026-11-10)
 
 Owner switched phones and wants DayDeck natively on iOS, sideloaded with a **free Apple ID**
 (7-day provisioning profiles, re-signed from their Mac). No PWA. Architecture unchanged —
@@ -464,6 +480,78 @@ below (signing steps on their Mac — cannot be done from here).
   the build breaks loudly (missing override) — cheap fix.
 - `super.scene(scene, willConnectTo:…)` must stay: Flutter builds the window there.
 - iOS memory: Flutter iOS engine + plugins are fine on any A14+ device.
+
+## Phase 11 — PersonalTerminal port — v0.11.0 (2026-11-16)
+
+DayDeck absorbs the Habit/Focus/Watch domain from PersonalTerminal (the Kotlin app this
+project grew out of). Port notes + honest gaps; owner tests on device as always.
+
+### What landed
+- **Habit engine v2** (`lib/domain/`, pure Dart, unit-tested): `schedule.dart` (daily mask /
+  weekly quota / biweekly parity / monthly clamp / paused ranges), `targets.dart` (daily
+  target, weekly ramp `rampTo`/`rampWeeks`, minimum versions `minTarget`), `streak_engine.dart`
+  (scheduled-day streaks; skips bridge free; shields bridge one miss; weekly quotas reported in
+  days; avoid-habits kept by default, broken by slips), `strength.dart` (EWMA completion rate,
+  0–100), `progression.dart` (XP, level curve `50·(n−1)·n`, titles guest→kernel,
+  1 shield per 10 completions capped at 3 held), `areas.dart` (life-area balance/neglect over
+  30d), `skip_rules.dart`, `challenges.dart`, `habit_templates.dart`.
+- **Habit model v2**: types checkbox/counter/timer/checklist; logs keyed `<habitId>|<date>`;
+  v0.10 rows auto-migrate on read (`title`→`name`, `cadence`→`schedule`,
+  log `date`/`done`→`day`/`completed`; weekly ⇒ `timesPerWeek: 1`). Locked by
+  `test/legacy_habits_test.dart`.
+- **New tabs (bottom bar, now 7)**: WATCH (wear tracker — the rotation; "wore it today" per
+  watch, wear counts, most/least worn, vault by days-since-worn, per-watch detail sheet with
+  photo, carry-either/or status owned/repair/wishlist/sold, add/edit sheet), FOCUS (pomodoro
+  cockpit — free session, stopwatch mode, per-habit timer sessions, auto break after
+  countdown, DND on Android during focus phases, session list, 26-week heatmap, today/week
+  minutes), PROFILE (// WHOAMI — level + title + XP bar, completions, shields held/spent,
+  life-area balance bars (tag habits with an area to feed it), XP ledger).
+- **Habits tab ported to v2 API** (name/schedule; toggle checkbox; weekly quota chip);
+  Today + Search rows updated the same way.
+- **Sync engine: 4 → 11 documents** — adds `routines.json`, `skip_rules.json`,
+  `shield_uses.json`, `xp_events.json`, `watches.json`, `wear_logs.json`, `focus_sessions.json`.
+  Watch photos are DEVICE-LOCAL ONLY (`watch_photo_store.dart`, ImagePicker, app documents
+  dir) — never synced, never exported. Conflicts sheet RESTORE now covers every restorable
+  doc (`habit_logs.json` excluded — logs are meaningless out of habit/day context).
+- **Backup export**: `schemaVersion` **2**, all 11 documents (was: 4 docs @ v1). Same note in
+  the file: no tokens, no iCal URL, no photos.
+- **Settings**: new PROFILE section (username, `// WHOAMI` dialog → `app.setUsername`) and
+  FOCUS section (focus length 5–120 step 5, break length 1–30 step 1, DND toggle
+  Android-only; iOS shows an explanatory row).
+- **Android**: `daydeck/dnd` channel in MainActivity.kt (`canManage` / `enable` / `disable` /
+  `openAccessSettings`); `ACCESS_NOTIFICATION_POLICY` declared (inert until the user grants
+  notification-policy access in system settings — toggle explains and deep-links there).
+  CAMERA permission was added earlier for watch photos.
+- **iOS**: unchanged this phase except Info.plist picked up camera/photo-library strings
+  earlier; nothing new to configure.
+- **Deep links**: `daydeck://…/habits` and `…/focus` (payloads `habits` / `focus`) route to
+  the new tabs.
+- **Tests**: 54/54 green; `analyze` clean. Added `test/habit_engine_test.dart` (16 tests:
+  schedules incl. biweekly/monthly-clamp/paused, streaks incl. shields/skips/avoid-habits,
+  minimums, ramps, progression, strength) and `test/legacy_habits_test.dart` (5 migration
+  locks). `test/streaks_test.dart` removed — superseded by the engine tests.
+- **Version**: `0.11.0+1`.
+
+### Honest gaps (not silently dropped)
+- The habit editor only edits name + schedule. The v2 engine's other knobs (type, target,
+  minTarget, ramp, pause windows, avoid-habits, anchors, life areas, reminders, focus/break
+  lengths per habit) are wired in the engine and read by Focus/Profile but have NO editor UI
+  yet — timers/checklists/counters can only be CREATED via code today. Next phase should add
+  the full habit sheet.
+- Routines / skip rules / challenges have stores + sync + tests but no UI at all yet.
+- Focus DND is Android-only and needs the one-time notification-policy grant; behaviour on
+  real devices unverified. iOS gets a plain local notification at phase end instead.
+- Watch photos + focus session stats are not part of the JSON backup (photos are local files;
+  focus_sessions ARE in the backup — sessions sync fine).
+- Weekly habits' streak is displayed in days (quota semantics), matching the engine port.
+- `HomeScreenWidget`/share flows unchanged from v0.10; not extended to the new tabs.
+
+### Session notes
+- The Arena snapshot served a **broken mixed tree** (missing assets, wrong .git base, engine
+  binaries lost). Recovered by re-cloning `dashboard-app-git` from GitHub as the .git base,
+  `git checkout -- assets ios` for the binary assets, re-downloading Flutter 3.47.9 (sha256
+  verified) — see “Session-start ritual” above. Lesson reinforced: **GitHub is the only
+  source of truth**; verify `git log -1` before trusting anything local.
 
 ## Phase 7 — Z Fold 5 inner-display layout — v0.7.0 (2026-11-10)
 

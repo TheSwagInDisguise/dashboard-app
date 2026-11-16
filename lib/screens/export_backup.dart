@@ -9,8 +9,10 @@ import 'package:share_plus/share_plus.dart';
 
 
 import '../state/event_store.dart';
+import '../state/focus_store.dart';
 import '../state/habit_store.dart';
 import '../state/tasks_store.dart';
+import '../state/watch_store.dart';
 import '../version.dart';
 
 /// One-tap disaster recovery: everything the app owns, as a single JSON
@@ -23,17 +25,28 @@ Future<void> exportJsonBackup(BuildContext context) async {
     final tasks = context.read<TasksStore>();
     final events = context.read<EventStore>();
     final habits = context.read<HabitStore>();
+    final focus = context.read<FocusStore>();
+    final watches = context.read<WatchStore>();
 
+    // schemaVersion 2 — mirrors the sync engine's 11 documents exactly
+    // (watch photos are device-local and are deliberately NOT here).
     final payload = <String, dynamic>{
-      'schemaVersion': 1,
+      'schemaVersion': 2,
       'app': 'daydeck',
       'appVersion': kAppVersion,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
-      'note': 'local backup — no tokens, no iCal URL, no calendar feed content',
+      'note': 'local backup — no tokens, no iCal URL, no calendar feed content, no photos',
       'tasks': tasks.snapshotItems().map((t) => t.toJson()).toList(),
       'events': events.snapshotItems().map((e) => e.toJson()).toList(),
       'habits': habits.snapshotHabits().map((h) => h.toJson()).toList(),
       'habit_logs': habits.snapshotLogs().map((l) => l.toJson()).toList(),
+      'routines': habits.snapshotRoutines().map((r) => r.toJson()).toList(),
+      'skip_rules': habits.snapshotSkipRules().map((r) => r.toJson()).toList(),
+      'shield_uses': habits.snapshotShields().map((s) => s.toJson()).toList(),
+      'xp_events': habits.snapshotXp().map((x) => x.toJson()).toList(),
+      'watches': watches.snapshotWatches().map((w) => w.toJson()).toList(),
+      'wear_logs': watches.snapshotWears().map((w) => w.toJson()).toList(),
+      'focus_sessions': focus.snapshotSessions().map((s) => s.toJson()).toList(),
     };
     final encoded = const JsonEncoder.withIndent('  ').convert(payload);
 

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/habit.dart';
 import '../state/app_state.dart';
 import '../state/habit_store.dart';
+import '../state/json_doc_store.dart';
 import '../theme/app_theme.dart';
 import '../theme/palettes.dart';
 import '../widgets/section_header.dart';
@@ -94,7 +95,7 @@ class HabitsScreen extends StatelessWidget {
                             doneToday: store.doneToday(habit.id),
                             streak: store.currentStreak(habit),
                             weekDots: store.thisWeekDots(habit),
-                            onToggle: () => store.toggleOn(habit.id),
+                            onToggle: () => store.toggle(habit.id),
                             onEdit: () => _showHabitSheet(context, initial: habit),
                           ),
                         ),
@@ -117,7 +118,7 @@ class HabitsScreen extends StatelessWidget {
                     doneToday: store.doneToday(habit.id),
                     streak: store.currentStreak(habit),
                     weekDots: store.thisWeekDots(habit),
-                    onToggle: () => store.toggleOn(habit.id),
+                    onToggle: () => store.toggle(habit.id),
                     onEdit: () => _showHabitSheet(context, initial: habit),
                   ),
                 ],
@@ -182,7 +183,7 @@ class _HabitCardRow extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          habit.title,
+                          habit.name,
                           style: TextStyle(
                             color: doneToday ? palette.dim : palette.text,
                             fontSize: 12.5,
@@ -192,7 +193,7 @@ class _HabitCardRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      TerminalChip(label: habit.cadence == 'weekly' ? 'WK' : 'DLY', color: palette.dim),
+                      TerminalChip(label: habit.schedule == ScheduleType.weekly ? 'WK' : 'DLY', color: palette.dim),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -222,7 +223,7 @@ class _HabitCardRow extends StatelessWidget {
                   style: mono(context, size: 17, weight: FontWeight.w700, color: streak > 0 ? palette.good : palette.dim),
                 ),
                 Text(
-                  habit.cadence == 'weekly' ? 'WK STREAK' : 'DAY STREAK',
+                  habit.schedule == ScheduleType.weekly ? 'WK STREAK' : 'DAY STREAK',
                   style: mono(context, size: 6, color: palette.dim, letterSpacing: 1.1),
                 ),
               ],
@@ -234,7 +235,7 @@ class _HabitCardRow extends StatelessWidget {
                 if (value == 'edit') onEdit();
               },
               itemBuilder: (context) => const [
-                PopupMenuItem(value: 'edit', child: Text('rename / change cadence')),
+                PopupMenuItem(value: 'edit', child: Text('rename / change schedule')),
               ],
             ),
           ],
@@ -295,8 +296,8 @@ class _HabitSheet extends StatefulWidget {
 }
 
 class _HabitSheetState extends State<_HabitSheet> {
-  late final TextEditingController _title;
-  late String _cadence;
+  late final TextEditingController _name;
+  late ScheduleType _schedule;
   bool _saving = false;
 
   bool get _isEdit => widget.initial != null;
@@ -304,28 +305,36 @@ class _HabitSheetState extends State<_HabitSheet> {
   @override
   void initState() {
     super.initState();
-    _title = TextEditingController(text: widget.initial?.title ?? '');
-    _cadence = widget.initial?.cadence ?? 'daily';
+    _name = TextEditingController(text: widget.initial?.name ?? '');
+    _schedule = widget.initial?.schedule ?? ScheduleType.daily;
   }
 
   @override
   void dispose() {
-    _title.dispose();
+    _name.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
-    final title = _title.text.trim();
-    if (title.isEmpty) {
+    final name = _name.text.trim();
+    if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('give it a name first')));
       return;
     }
     setState(() => _saving = true);
     final store = context.read<HabitStore>();
+    final now = DateTime.now().toUtc();
     if (_isEdit) {
-      await store.updateHabit(widget.initial!.id, title: title, cadence: _cadence);
+      await store.updateHabit(widget.initial!.id,
+          (h) => h.copyWith(name: name, schedule: _schedule, updatedAt: now));
     } else {
-      await store.addHabit(title: title, cadence: _cadence);
+      await store.addHabit(() => Habit(
+            id: JsonDocStore.newId(),
+            name: name,
+            schedule: _schedule,
+            createdAt: now,
+            updatedAt: now,
+          ));
     }
     if (mounted) Navigator.of(context).pop();
   }
@@ -335,7 +344,7 @@ class _HabitSheetState extends State<_HabitSheet> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('DELETE HABIT?'),
-        content: Text('“${widget.initial!.title}” and its streak history will be removed. '
+        content: Text('“${widget.initial!.name}” and its streak history will be removed. '
             'This cannot be undone once it syncs.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('cancel')),
@@ -387,7 +396,7 @@ class _HabitSheetState extends State<_HabitSheet> {
                   ],
                 ),
                 TextField(
-                  controller: _title,
+                  controller: _name,
                   autofocus: true,
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _save(),
@@ -398,19 +407,19 @@ class _HabitSheetState extends State<_HabitSheet> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Text('cadence', style: mono(context, size: 9.5, color: p.dim, letterSpacing: 1.6)),
+                Text('schedule', style: mono(context, size: 9.5, color: p.dim, letterSpacing: 1.6)),
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    for (final value in ['daily', 'weekly']) ...[
+                    for (final value in [ScheduleType.daily, ScheduleType.weekly]) ...[
                       _CadenceOption(
                         palette: p,
-                        label: value.toUpperCase(),
-                        caption: value == 'daily' ? 'streak per day' : 'streak per week',
-                        selected: _cadence == value,
-                        onTap: () => setState(() => _cadence = value),
+                        label: value == ScheduleType.daily ? 'DAILY' : 'WEEKLY',
+                        caption: value == ScheduleType.daily ? 'streak per day' : 'streak per week',
+                        selected: _schedule == value,
+                        onTap: () => setState(() => _schedule = value),
                       ),
-                      if (value != 'weekly') const SizedBox(width: 8),
+                      if (value != ScheduleType.weekly) const SizedBox(width: 8),
                     ],
                   ],
                 ),

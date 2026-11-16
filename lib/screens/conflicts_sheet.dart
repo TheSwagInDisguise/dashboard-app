@@ -193,10 +193,29 @@ String _docLabel(Object? doc) {
       return 'habit';
     case 'habit_logs.json':
       return 'habit log';
+    case 'routines.json':
+      return 'routine';
+    case 'skip_rules.json':
+      return 'skip rule';
+    case 'shield_uses.json':
+      return 'streak shield';
+    case 'xp_events.json':
+      return 'xp event';
+    case 'watches.json':
+      return 'watch';
+    case 'wear_logs.json':
+      return 'wear log';
+    case 'focus_sessions.json':
+      return 'focus session';
     default:
       return doc?.toString() ?? '?';
   }
 }
+
+/// The sync engine can re-create everything except [habit_logs.json] rows —
+/// those reference a habit + day and are meaningless out of context.
+bool _restorable(Object? doc) =>
+    doc != null && doc != 'habit_logs.json' && _docLabel(doc) != doc.toString();
 
 class _ConflictRow extends StatelessWidget {
   const _ConflictRow({
@@ -217,12 +236,13 @@ class _ConflictRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = palette;
     final item = entry['item'];
-    final title = (item is Map ? item['title'] : null)?.toString() ??
+    final itemMap = item is Map ? item : const {};
+    final title = (itemMap['title'] ?? itemMap['name'] ?? itemMap['model'] ?? itemMap['habitId'])?.toString() ??
         (entry['title']?.toString() ?? '(untitled)');
     final when = entry['when']?.toString() ?? '';
     final side = entry['side']?.toString() ?? '?';
     final doc = _docLabel(entry['doc']);
-    final supported = ['task', 'event', 'habit'].contains(doc);
+    final supported = _restorable(entry['doc']);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
