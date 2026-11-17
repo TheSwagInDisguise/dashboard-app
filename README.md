@@ -1,6 +1,6 @@
 # DayDeck
 
-`daydeck` — a single-user, **terminal-styled daily dashboard** for Android (sideloaded APK) with a web build for the desktop. Offline-first, no server of your own, no Google sign-in.
+`daydeck` — a single-user, **terminal-styled daily dashboard** for Android (sideloaded APK) and iPhone (unsigned IPA re-signed on-device via Signulous), plus a web build for the desktop. Offline-first, no server of your own, no Google sign-in.
 
 > Today's view · tasks · local events (private or queued for Google Calendar) · habits with streaks
 
@@ -10,17 +10,16 @@
 
 ## Status
 
-**Phase 1 — scaffold & signed APK pipeline.** The app boots to the terminal-styled Today view with *sample* data (clearly labelled). Features land phase by phase — see [PROJECT_NOTES.md](PROJECT_NOTES.md) for the full roadmap and design decisions.
+**v0.11.0** — Android APK via releases; iPhone via unsigned IPA + Signulous; habits v2 (XP, levels, shields, streaks), watches wear-tracking, pomodoro focus timer, profile. Sync to a private `dashboard-data` repo; web build on GitHub Pages. See [PROJECT_NOTES.md](PROJECT_NOTES.md) for the full phase log.
 
-| Phase | Feature | Status |
-|-------|---------|--------|
-| 1 | Repos, CI, signed release APK, terminal theme | ✅ in progress |
-| 2 | Tasks with on-device storage (offline) | planned |
-| 3 | Sync to private `dashboard-data` repo (JSON, last-write-wins) | planned |
-| 4 | Google Calendar feed (view-only iCal), Today view | planned |
-| 5 | Local events, shared/private queue, evening reminder | planned |
-| 6 | Habit tracker with streaks | planned |
-| 7 | Web build on GitHub Pages | planned |
+## Install (iPhone)
+
+1. Open the [Releases](https://github.com/TheSwagInDisguise/dashboard-app/releases) page on your phone or computer.
+2. Download `DayDeck-unsigned.ipa` from the latest release (it is an *unsigned* build — CI never touches Apple signing credentials).
+3. Upload the IPA at [signulous.com](https://www.signulous.com/); their signing platform re-signs it with its own certificate and gives you an install link for your iPhone.
+4. Install from that link, then trust the certificate on the phone: **Settings → General → VPN & Device Management**.
+
+No Xcode, no Mac, no Apple Developer membership required. Signing happens on Signulous' side — check their docs for certificate lifetimes and re-install when it expires.
 
 ## Install (Android)
 
@@ -47,7 +46,7 @@ flutter build apk --release   # signed if android/key.properties exists (CI only
 flutter build web --release
 ```
 
-Releases are cut by pushing a tag `vX.Y.Z`; the [release workflow](.github/workflows/release.yml) builds the signed APK and publishes a GitHub Release.
+Releases are cut by pushing a tag `vX.Y.Z`; the [release workflow](.github/workflows/release.yml) builds the signed APK **and** the unsigned IPA, and publishes both to a GitHub Release.
 
 ## Layout
 
@@ -58,7 +57,7 @@ lib/
   data/      sample data (Phase 1 only — replaced by real stores later)
   screens/   today / tasks / habits / settings + bottom-nav shell
   widgets/   scanline overlay, blinking cursor, section rules, chips
-.github/workflows/release.yml   tag-driven signed-APK build → GitHub Releases
+.github/workflows/release.yml   tag-driven signed-APK + unsigned-IPA build → GitHub Releases
 assets/      icon + OFL-licensed JetBrains Mono (assets/fonts/OFL.txt)
 ```
 

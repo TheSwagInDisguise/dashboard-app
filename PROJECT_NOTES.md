@@ -448,6 +448,15 @@ below (signing steps on their Mac — cannot be done from here).
   APK path untouched. Manual dispatch builds now exercise both jobs.
 - analyze clean; 37/37 tests green; web build rebuilt (PWA users unaffected).
 
+### iOS runbook — Mac sideload path (historical, superseded)
+
+> **Superseded 2026-11-17:** the owner will sign and install the IPA via **Signulous**
+> (signulous.com) — CI now publishes `DayDeck-unsigned.ipa` on every tag. No Xcode, no Mac,
+> no Apple Developer membership. Upload the release IPA to Signulous; it re-signs with its
+> own certificate and hands back an install link. Trust the profile on the phone under
+> Settings → General → VPN & Device Management. Certificate lifetime is governed by the
+> service — see their FAQ. The Xcode path below remains as a fallback only.
+
 ### iOS runbook (owner, on the Mac)
 1. Clone/pull dashboard-app. Install Flutter 3.47.9 stable + Xcode from the Mac App Store
    (free Apple ID is enough — no $99 membership needed).

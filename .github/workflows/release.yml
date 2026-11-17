@@ -1,10 +1,11 @@
 name: release
 
-# Builds a signed release APK and compile-checks the iOS app whenever a
-# version tag (vX.Y.Z) is pushed. APK is published to GitHub Releases. The
-# iOS job is a compile gate only — DayDeck ships on iPhone via free Apple ID
-# sideloading from the owner's Mac (see PROJECT_NOTES.md#phase-10). Also runs
-# on manual dispatch so the build can be exercised without cutting a release.
+# Builds a signed release APK and an UNSIGNED iOS IPA whenever a version tag
+# (vX.Y.Z) is pushed. APK and IPA are both published to GitHub Releases. The
+# IPA is what the owner installs via Signulous (signulous.com), which re-signs
+# and installs it on-device — no Apple Developer membership, no Xcode, no Mac
+# required. Also runs on manual dispatch so the build can be exercised without
+# cutting a release.
 on:
   push:
     tags:
@@ -91,10 +92,10 @@ jobs:
           retention-days: 14
 
   build-ios:
-    # Compile gate for the iOS target. No code signing happens here — the
-    # owner sideloads the app with a free Apple ID on their Mac (7-day
-    # provisioning profile). This job proves the Swift and the Flutter iOS
-    # build compile on every tag.
+    # Produces an UNSIGNED .ipa (Payload/Runner.app zipped). No Apple signing
+    # credentials ever touch CI: Signulous re-signs the uploaded IPA with its
+    # own certificate on install. This job runs the analyze/test gates, builds
+    # release-mode iOS, and packages the app for upload.
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -117,6 +118,31 @@ jobs:
       - name: Test
         run: flutter test
 
-      - name: Build iOS (no codesign — compile only)
+      - name: Build iOS (no codesign)
         run: flutter build ios --release --no-codesign
+
+      - name: Package unsigned IPA (Payload/Runner.app)
+        run: |
+          cd build/ios/iphoneos
+          rm -rf Payload DayDeck-unsigned.ipa
+          mkdir -p Payload
+          cp -R Runner.app Payload/
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/DayDeck-unsigned.ipa" Payload
+          rm -rf Payload
+          ls -lh "$GITHUB_WORKSPACE/DayDeck-unsigned.ipa"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: daydeck-unsigned-ipa
+          path: DayDeck-unsigned.ipa
+          retention-days: 90
+
+      - name: Attach unsigned IPA to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: DayDeck ${{ github.ref_name }}
+          files: DayDeck-unsigned.ipa
+          fail_on_unmatched_files: true
 
