@@ -16,15 +16,16 @@
 
 **v0.11.0** — Android APK via releases; iPhone via unsigned IPA + Signulous; habits v2 (XP, levels, shields, streaks), watches wear-tracking, pomodoro focus timer, profile. Sync to a private `dashboard-data` repo; web build on GitHub Pages. See [PROJECT_NOTES.md](PROJECT_NOTES.md) for the full phase log.
 
-## iPhone screenshots
+## iPhone-sized screenshots
 
-Captured at 1290 × 2796 pixels from the Flutter web build in an iPhone-sized viewport (not a physical iPhone or iOS Simulator; sample data is intentionally empty).
+Current unreleased UI preview, captured from the Flutter web build at a 430 × 932 viewport and 3× scale (1290 × 2796 pixels). These are not physical iPhone or iOS Simulator captures; sample data is intentionally empty.
 
 <p align="center">
-  <img src="screenshots/ios/today.png" alt="DayDeck Today screen on iPhone" width="220" />
-  <img src="screenshots/ios/habits.png" alt="DayDeck Habits screen on iPhone" width="220" />
-  <img src="screenshots/ios/watch.png" alt="DayDeck Watches screen on iPhone" width="220" />
-  <img src="screenshots/ios/settings.png" alt="DayDeck Settings screen on iPhone" width="220" />
+  <img src="screenshots/ios/today.png" alt="DayDeck Today screen in an iPhone-sized viewport" width="180" />
+  <img src="screenshots/ios/habits.png" alt="DayDeck Habits screen in an iPhone-sized viewport" width="180" />
+  <img src="screenshots/ios/watch.png" alt="DayDeck Watches screen in an iPhone-sized viewport" width="180" />
+  <img src="screenshots/ios/profile.png" alt="DayDeck Profile tab with settings moved inside it" width="180" />
+  <img src="screenshots/ios/settings.png" alt="DayDeck Settings page with PersonalTerminal theme families" width="180" />
 </p>
 
 ## Install (iPhone)

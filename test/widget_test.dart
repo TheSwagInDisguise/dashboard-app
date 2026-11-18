@@ -88,7 +88,7 @@ void main() {
     expect(find.text('live store probe task'), findsWidgets);
   });
 
-  testWidgets('settings are reachable inside profile and expose theme picker and sync guide', (tester) async {
+  testWidgets('settings are reachable inside profile and show original theme picker', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final tasks = TasksStore();
     await tasks.load();
@@ -105,6 +105,6 @@ void main() {
     expect(find.text('classic green'), findsOneWidget);
     expect(find.text('amber'), findsOneWidget);
     expect(find.textContaining('light'), findsOneWidget);
-    expect(find.text('how to create your sync token'), findsOneWidget);
+    expect(find.text('DAYDECK ORIGINALS'), findsOneWidget);
   });
 }

@@ -151,6 +151,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // ============ APPEARANCE ============
         SectionHeader(palette: p, title: 'APPEARANCE'),
         const SizedBox(height: 8),
+        Text('DAYDECK ORIGINALS', style: mono(context, size: 9, weight: FontWeight.w700, color: p.dim, letterSpacing: 1.4)),
+        const SizedBox(height: 6),
         for (final entry in kPalettes.entries) ...[
           _SchemeTile(
             paletteOfOption: entry.value,
@@ -162,6 +164,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             dimColor: p.dim,
             borderColor: p.border,
             panelColor: p.panel,
+          ),
+          const SizedBox(height: 8),
+        ],
+        const SizedBox(height: 8),
+        Text('PERSONAL TERMINAL · 15 FAMILIES', style: mono(context, size: 9, weight: FontWeight.w700, color: p.dim, letterSpacing: 1.4)),
+        const SizedBox(height: 6),
+        for (final family in kPersonalTerminalThemeFamilies) ...[
+          _PersonalTerminalThemeTile(
+            family: family,
+            activeScheme: app.scheme,
+            onSelect: app.setScheme,
+            palette: p,
           ),
           const SizedBox(height: 8),
         ],
@@ -605,6 +619,95 @@ class _Panel extends StatelessWidget {
       child: child,
     );
   }
+}
+
+class _PersonalTerminalThemeTile extends StatelessWidget {
+  const _PersonalTerminalThemeTile({
+    required this.family,
+    required this.activeScheme,
+    required this.onSelect,
+    required this.palette,
+  });
+
+  final PersonalTerminalThemeFamily family;
+  final DayDeckScheme activeScheme;
+  final ValueChanged<DayDeckScheme> onSelect;
+  final TerminalPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = activeScheme == family.darkScheme || activeScheme == family.lightScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      decoration: BoxDecoration(
+        color: selected ? palette.accent.withValues(alpha: 0.07) : palette.panel,
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: selected ? palette.accent : palette.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(family.label, style: mono(context, size: 11, weight: FontWeight.w700, color: selected ? palette.accent : palette.text, letterSpacing: 0.8)),
+                const SizedBox(height: 2),
+                Text(family.description, style: TextStyle(color: palette.dim, fontSize: 9.5)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          _ThemeVariantButton(
+            key: ValueKey('theme-${family.id}-dark'),
+            label: 'DARK',
+            option: paletteOf(family.darkScheme),
+            selected: activeScheme == family.darkScheme,
+            onTap: () => onSelect(family.darkScheme),
+          ),
+          const SizedBox(width: 5),
+          _ThemeVariantButton(
+            key: ValueKey('theme-${family.id}-light'),
+            label: 'LIGHT',
+            option: paletteOf(family.lightScheme),
+            selected: activeScheme == family.lightScheme,
+            onTap: () => onSelect(family.lightScheme),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ThemeVariantButton extends StatelessWidget {
+  const _ThemeVariantButton({
+    super.key,
+    required this.label,
+    required this.option,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final TerminalPalette option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          width: 42,
+          height: 32,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: option.bg,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: selected ? option.accent : option.border, width: selected ? 2 : 1),
+          ),
+          child: Text(label, style: mono(context, size: 6.5, weight: FontWeight.w800, color: option.text, letterSpacing: 0.3)),
+        ),
+      );
 }
 
 class _SchemeTile extends StatelessWidget {
