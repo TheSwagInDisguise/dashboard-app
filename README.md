@@ -1,5 +1,9 @@
 # DayDeck
 
+<p align="center">
+  <img src="assets/icon/daydeck_icon.png" alt="DayDeck logo: cyan terminal prompt on dark navy" width="180" />
+</p>
+
 `daydeck` — a single-user, **terminal-styled daily dashboard** for Android (sideloaded APK) and iPhone (unsigned IPA re-signed on-device via Signulous), plus a web build for the desktop. Offline-first, no server of your own, no Google sign-in.
 
 > Today's view · tasks · local events (private or queued for Google Calendar) · habits with streaks
@@ -11,6 +15,17 @@
 ## Status
 
 **v0.11.0** — Android APK via releases; iPhone via unsigned IPA + Signulous; habits v2 (XP, levels, shields, streaks), watches wear-tracking, pomodoro focus timer, profile. Sync to a private `dashboard-data` repo; web build on GitHub Pages. See [PROJECT_NOTES.md](PROJECT_NOTES.md) for the full phase log.
+
+## iPhone screenshots
+
+Captured at 1290 × 2796 pixels (iPhone-sized viewport; sample data is intentionally empty).
+
+<p align="center">
+  <img src="screenshots/ios/today.png" alt="DayDeck Today screen on iPhone" width="220" />
+  <img src="screenshots/ios/habits.png" alt="DayDeck Habits screen on iPhone" width="220" />
+  <img src="screenshots/ios/watch.png" alt="DayDeck Watches screen on iPhone" width="220" />
+  <img src="screenshots/ios/settings.png" alt="DayDeck Settings screen on iPhone" width="220" />
+</p>
 
 ## Install (iPhone)
 

@@ -414,18 +414,21 @@ class _HeaderRow extends StatelessWidget {
             BlinkingCursor(color: palette.accent),
           ],
         ),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(dateLine, style: mono(context, size: 11, weight: FontWeight.w600, color: palette.accent2)),
-                const SizedBox(height: 2),
-                Text(metaLine, style: mono(context, size: 10, color: palette.dim)),
-              ],
-            ),
-            const SizedBox(width: 10),
+        Flexible(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(dateLine, maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(context, size: 10, weight: FontWeight.w600, color: palette.accent2)),
+                    const SizedBox(height: 2),
+                    Text(metaLine, maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(context, size: 9, color: palette.dim)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
             IconButton(
               icon: Icon(Icons.search, color: palette.dim, size: 20),
               tooltip: 'search',
@@ -433,7 +436,8 @@ class _HeaderRow extends StatelessWidget {
               padding: const EdgeInsets.all(6),
               constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
             ),
-          ],
+            ],
+          ),
         ),
       ],
     );

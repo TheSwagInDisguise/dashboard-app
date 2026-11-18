@@ -376,12 +376,15 @@ class _TerminalTabBar extends StatelessWidget {
                                 const SizedBox(height: 3),
                                 Text(
                                   tabs[i].label,
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  overflow: TextOverflow.clip,
                                   style: mono(
                                     context,
-                                    size: 9,
+                                    size: 8,
                                     weight: FontWeight.w600,
                                     color: i == index ? palette.accent : palette.dim,
-                                    letterSpacing: 2.4,
+                                    letterSpacing: 1.2,
                                   ),
                                 ),
                               ],
