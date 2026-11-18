@@ -18,7 +18,7 @@
 
 ## iPhone screenshots
 
-Captured at 1290 × 2796 pixels (iPhone-sized viewport; sample data is intentionally empty).
+Captured at 1290 × 2796 pixels from the Flutter web build in an iPhone-sized viewport (not a physical iPhone or iOS Simulator; sample data is intentionally empty).
 
 <p align="center">
   <img src="screenshots/ios/today.png" alt="DayDeck Today screen on iPhone" width="220" />
