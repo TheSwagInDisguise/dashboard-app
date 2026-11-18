@@ -85,6 +85,7 @@ class _TokenExpiredBanner extends StatelessWidget {
 
 class _ShellState extends State<Shell> with WidgetsBindingObserver {
   int _index = 0;
+  bool _showSettings = false;
   bool _locked = false;
   bool _authenticating = false;
   DateTime? _pausedAt;
@@ -98,7 +99,6 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     (icon: Icons.watch_later_outlined, label: 'WATCH'),
     (icon: Icons.timer_outlined, label: 'FOCUS'),
     (icon: Icons.person_outline, label: 'PROFILE'),
-    (icon: Icons.settings_outlined, label: 'SETTINGS'),
   ];
 
   @override
@@ -277,7 +277,13 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
         child: Column(
           children: [
             if (sync.status == SyncStatus.tokenInvalid)
-              _TokenExpiredBanner(palette: palette, onFix: () => setState(() => _index = 6)),
+              _TokenExpiredBanner(
+                palette: palette,
+                onFix: () => setState(() {
+                  _index = 5;
+                  _showSettings = true;
+                }),
+              ),
             Expanded(
               child: Stack(
                 children: [
@@ -288,14 +294,19 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
                       ),
                       child: IndexedStack(
                         index: _index,
-                        children: const [
-                          TodayScreen(),
-                          TasksScreen(),
-                          HabitsScreen(),
-                          WatchScreen(),
-                          FocusScreen(),
-                          ProfileScreen(),
-                          SettingsScreen(),
+                        children: [
+                          const TodayScreen(),
+                          const TasksScreen(),
+                          const HabitsScreen(),
+                          const WatchScreen(),
+                          const FocusScreen(),
+                          _showSettings
+                              ? SettingsScreen(
+                                  onBackToProfile: () => setState(() => _showSettings = false),
+                                )
+                              : ProfileScreen(
+                                  onOpenSettings: () => setState(() => _showSettings = true),
+                                ),
                         ],
                       ),
                     ),
@@ -311,7 +322,10 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
         palette: palette,
         tabs: _tabs,
         index: _index,
-        onChanged: (i) => setState(() => _index = i),
+        onChanged: (i) => setState(() {
+          _index = i;
+          if (i == 5) _showSettings = false;
+        }),
       ),
     );
   }

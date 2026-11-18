@@ -72,7 +72,7 @@ void main() {
     expect(find.text('WATCH'), findsWidgets);
     expect(find.text('FOCUS'), findsWidgets);
     expect(find.text('PROFILE'), findsWidgets);
-    expect(find.text('SETTINGS'), findsWidgets);
+    expect(find.text('SETTINGS'), findsNothing);
     expect(find.text('CALENDAR'), findsOneWidget);
     expect(find.textContaining('add your first habit'), findsOneWidget);
   });
@@ -88,14 +88,16 @@ void main() {
     expect(find.text('live store probe task'), findsWidgets);
   });
 
-  testWidgets('switching to settings exposes scheme picker and token guide', (tester) async {
+  testWidgets('settings are reachable inside profile and expose theme picker and sync guide', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final tasks = TasksStore();
     await tasks.load();
 
     await _pumpApp(tester, tasks: tasks);
 
-    await tester.tap(find.text('SETTINGS'));
+    await tester.tap(find.text('PROFILE').last);
+    await tester.pump();
+    await tester.tap(find.text('PREFERENCES & SYNC'));
     await tester.pump();
 
     expect(find.text('APPEARANCE'), findsOneWidget);

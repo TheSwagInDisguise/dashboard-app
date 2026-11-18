@@ -14,7 +14,9 @@ import '../widgets/terminal_card.dart';
 /// whoami — the operator profile. Level + XP from the ledger, life-area
 /// balance from the last 30 days, and the XP feed.
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({super.key, this.onOpenSettings});
+
+  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +47,21 @@ class ProfileScreen extends StatelessWidget {
               style: mono(context, size: 9.5, color: p.dim, letterSpacing: 2.4),
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              onPressed: onOpenSettings,
+              icon: const Icon(Icons.tune, size: 16),
+              label: Text('PREFERENCES & SYNC', style: mono(context, size: 9, weight: FontWeight.w700, letterSpacing: 1.2)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: p.accent,
+                side: BorderSide(color: p.border),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
           _LevelCard(palette: p, progress: progress, totalCompletions: store.totalCompletions, shieldsAvailable: store.shieldsAvailable, shieldsUsed: store.shieldsUsed),
           const SizedBox(height: 14),
           SectionHeader(palette: p, title: 'LIFE AREAS', trailing: 'last 30 days'),

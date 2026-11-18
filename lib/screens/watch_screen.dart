@@ -476,6 +476,15 @@ class _CollectionRow extends StatelessWidget {
           ],
         ),
       ),
+      trailing: IconButton(
+        tooltip: 'add or change watch photo',
+        visualDensity: VisualDensity.compact,
+        icon: Icon(Icons.add_a_photo_outlined, color: p.accent, size: 19),
+        onPressed: () => _pickPhoto(
+          context,
+          (path) => context.read<WatchPhotoStore>().setProfilePhoto(watch.id, path),
+        ),
+      ),
       onTap: () => _showWatchDetail(context, watch),
     );
   }

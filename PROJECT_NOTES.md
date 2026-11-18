@@ -642,3 +642,10 @@ GIT_ASKPASS=/tmp/askpass GIT_TERMINAL_PROMPT=0 GITHUB_TOKEN=$(cat /home/user/day
    sync token if not yet, (c) paste the secret iCal URL in Settings → CALENDAR (in-app guide),
    (d) on the web build: add repo secret ICAL_URL in dashboard-data (guide in Settings), then run
    “refresh-calendar” once manually, (e) test phone↔web with tasks/events/habits.
+
+## Owner feedback iteration — profile/settings, compact Today, theme/watch parity
+
+- User feedback was based on the v0.11.0 IPA from `main`; this is not a v0.12 parity build. Current remote main has only five DayDeck schemes, while PersonalTerminal has 15 families with dark/light variants: Dracula, Nord, Solarized, Gruvbox, Monokai, Catppuccin, Tokyo Night, One Dark, Rosé Pine, Everforest, Amber CRT, Matrix, Hacker, Synthwave, Signal.
+- Working locally on `feature/profile-settings-ux`, branched from remote `main` at `7c24c81`; no release/tag or push for this feature work.
+- First UI iteration: removed the redundant in-app ticking clock and version from Today’s status strip (kept sync state); removed the standalone Settings bottom tab and made Settings a subpage within Profile with a clear back path; added a direct camera/photo-library shortcut on each watch collection row. Watch images remain device-local, as before.
+- Verification after this iteration: `flutter analyze` clean, all 54 tests pass, and web release build succeeds. Theme-family parity is still pending; no new IPA is ready yet.

@@ -16,7 +16,6 @@ import '../theme/app_theme.dart';
 import '../theme/palettes.dart';
 import 'search_screen.dart';
 import '../notifications/deep_links.dart';
-import '../version.dart';
 import '../widgets/blinking_cursor.dart';
 import '../widgets/section_header.dart';
 import '../widgets/task_row.dart';
@@ -53,7 +52,7 @@ class TodayScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _StatusStrip(palette: p, count: store.openCount),
+          _StatusStrip(palette: p),
           const _SharedQueueDeepLinkHandler(),
           const SizedBox(height: 10),
           _HeaderRow(
@@ -292,28 +291,15 @@ String _timeRange(DateTime start, DateTime end, bool allDay) {
 
 
 class _StatusStrip extends StatelessWidget {
-  const _StatusStrip({required this.palette, required this.count});
+  const _StatusStrip({required this.palette});
 
   final TerminalPalette palette;
-  final int count;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: palette.border)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _SyncIndicator(palette: palette),
-          _LiveClock(palette: palette),
-          Text('v$kAppVersion', style: mono(context, size: 10, color: palette.dim)),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Align(
+        alignment: Alignment.centerLeft,
+        child: _SyncIndicator(palette: palette),
+      );
 }
 
 class _SyncIndicator extends StatelessWidget {
@@ -353,41 +339,6 @@ class _SyncIndicator extends StatelessWidget {
     if (time == null) return 'synced';
     final t = time.toLocal();
     return 'synced ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-  }
-}
-
-class _LiveClock extends StatefulWidget {
-  const _LiveClock({required this.palette});
-
-  final TerminalPalette palette;
-
-  @override
-  State<_LiveClock> createState() => _LiveClockState();
-}
-
-class _LiveClockState extends State<_LiveClock> {
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final label =
-        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
-    return Text(label, style: mono(context, size: 11, weight: FontWeight.w600, color: widget.palette.text));
   }
 }
 

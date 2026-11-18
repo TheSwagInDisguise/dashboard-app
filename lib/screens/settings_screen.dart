@@ -24,7 +24,9 @@ const String _kSecretsUrl = 'https://github.com/TheSwagInDisguise/dashboard-data
 /// The GitHub sync token is only ever held in secure device storage; this
 /// screen never logs it and this app contains no secrets.
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.onBackToProfile});
+
+  final VoidCallback? onBackToProfile;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -123,6 +125,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 22),
       children: [
+        if (widget.onBackToProfile != null) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: widget.onBackToProfile,
+              icon: const Icon(Icons.arrow_back, size: 16),
+              label: Text('PROFILE', style: mono(context, size: 9, weight: FontWeight.w700, letterSpacing: 1.4)),
+              style: TextButton.styleFrom(foregroundColor: p.dim),
+            ),
+          ),
+        ],
         const SizedBox(height: 6),
         Center(
           child: Text(
