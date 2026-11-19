@@ -92,7 +92,7 @@ class HabitInsightStrip extends StatelessWidget {
             context,
             'REPAIR · ${store.shieldsAvailable} shield${store.shieldsAvailable == 1 ? '' : 's'}',
             palette.warn,
-            () => store.repairWithShield(habit.id),
+            () => _confirmRepair(context),
           ),
         );
       } else {
@@ -107,6 +107,40 @@ class HabitInsightStrip extends StatelessWidget {
         runSpacing: 4,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: children,
+      ),
+    );
+  }
+
+  Future<void> _confirmRepair(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('USE A STREAK SHIELD?'),
+        content: Text(
+          'Spend one shield to bridge the missed day for “${habit.name}”?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('CANCEL'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('REPAIR'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final repaired = await store.repairWithShield(habit.id);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          repaired
+              ? 'streak repaired · one shield spent'
+              : 'could not repair · no shield or gap remains',
+        ),
       ),
     );
   }

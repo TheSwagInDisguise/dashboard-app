@@ -14,7 +14,7 @@
 
 ## Status
 
-**v0.11.0** — Android APK via releases; iPhone via unsigned IPA + Signulous; habits v2 (XP, levels, shields, streaks), watches wear-tracking, pomodoro focus timer, profile. Sync to a private `dashboard-data` repo; web build on GitHub Pages. See [PROJECT_NOTES.md](PROJECT_NOTES.md) for the full phase log.
+**v0.12.0** — adds the full habit editor (checkboxes, counters, timers, checklists, schedules, targets, reminders, ramps, anchors and life areas), late-log and shield repair controls, Today command prompt, weekly review + 12-week heatmap, watch rotation/strap/service tools, and safe JSON backup import/merge. Android APK and unsigned iOS IPA are published through GitHub Releases; iPhone installs use Signulous. Sync remains compatible with existing `dashboard-data` records; watch photos remain device-local. See [PROJECT_NOTES.md](PROJECT_NOTES.md) for release and test details.
 
 ## iPhone-sized screenshots
 

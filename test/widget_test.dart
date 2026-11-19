@@ -88,6 +88,26 @@ void main() {
     expect(find.text('live store probe task'), findsWidgets);
   });
 
+  testWidgets('habit editor exposes the full v2 habit controls', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final tasks = TasksStore();
+    await tasks.load();
+    await _pumpApp(tester, tasks: tasks);
+
+    await tester.tap(find.text('HABITS').last);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.ensureVisible(find.text('ADD YOUR FIRST HABIT'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('ADD YOUR FIRST HABIT'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('tracking type'), findsOneWidget);
+    expect(find.text('cadence'), findsOneWidget);
+    expect(find.text('Avoid habit'), findsOneWidget);
+    expect(find.text('habit anchor (optional)'), findsOneWidget);
+    expect(find.text('ADD HABIT'), findsOneWidget);
+  });
+
   testWidgets('settings are reachable inside profile and show original theme picker', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final tasks = TasksStore();

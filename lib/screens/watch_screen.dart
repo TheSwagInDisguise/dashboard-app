@@ -941,6 +941,8 @@ class _WatchSheetState extends State<_WatchSheet> {
   late final TextEditingController _ref;
   late final TextEditingController _case;
   late final TextEditingController _notes;
+  late final TextEditingController _serviceInterval;
+  int? _purchaseDay;
 
   late String _status;
   bool _saving = false;
@@ -958,12 +960,14 @@ class _WatchSheetState extends State<_WatchSheet> {
     _ref = TextEditingController(text: h?.reference ?? '');
     _case = TextEditingController(text: h?.caseSizeMm == null ? '' : '${h!.caseSizeMm}');
     _notes = TextEditingController(text: h?.notes ?? '');
+    _serviceInterval = TextEditingController(text: h == null || h.serviceIntervalMonths == 0 ? '' : '${h.serviceIntervalMonths}');
+    _purchaseDay = h?.purchaseDay;
     _status = h?.status ?? Watch.statusOwned;
   }
 
   @override
   void dispose() {
-    for (final c in [_name, _nick, _brand, _movement, _ref, _case, _notes]) {
+    for (final c in [_name, _nick, _brand, _movement, _ref, _case, _notes, _serviceInterval]) {
       c.dispose();
     }
     super.dispose();
@@ -978,6 +982,12 @@ class _WatchSheetState extends State<_WatchSheet> {
     setState(() => _saving = true);
     final store = context.read<WatchStore>();
     final caseMm = double.tryParse(_case.text.trim());
+    final serviceInterval = int.tryParse(_serviceInterval.text.trim()) ?? 0;
+    if (serviceInterval < 0) {
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('service interval cannot be negative')));
+      return;
+    }
     if (widget.initial != null) {
       await store.updateWatch(widget.initial!.copyWith(
             brand: _brand.text.trim(),
@@ -989,6 +999,9 @@ class _WatchSheetState extends State<_WatchSheet> {
             clearCaseSizeMm: caseMm == null,
             status: _status,
             notes: _notes.text.trim(),
+            serviceIntervalMonths: serviceInterval,
+            purchaseDay: _purchaseDay,
+            clearPurchaseDay: _purchaseDay == null,
           ));
     } else {
       await store.addWatch(
@@ -1000,9 +1013,17 @@ class _WatchSheetState extends State<_WatchSheet> {
             caseSizeMm: caseMm,
             status: _status,
             notes: _notes.text.trim(),
+            serviceIntervalMonths: serviceInterval,
+            purchaseDay: _purchaseDay,
           );
     }
     if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _pickPurchaseDate() async {
+    final initial = _purchaseDay == null ? DateTime.now() : dateOfEpochDay(_purchaseDay!);
+    final picked = await showDatePicker(context: context, initialDate: initial, firstDate: DateTime(1900), lastDate: DateTime.now());
+    if (picked != null) setState(() => _purchaseDay = epochDayOf(picked));
   }
 
   @override
@@ -1102,6 +1123,13 @@ class _WatchSheetState extends State<_WatchSheet> {
                       ),
                   ],
                 ),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(child: TextField(key: const ValueKey('watch-service-interval'), controller: _serviceInterval, keyboardType: TextInputType.number, style: TextStyle(color: p.text), decoration: const InputDecoration(labelText: 'service interval (months)', hintText: '0 = not tracked'))),
+                  const SizedBox(width: 10),
+                  Expanded(child: OutlinedButton.icon(key: const ValueKey('watch-purchase-date'), onPressed: _pickPurchaseDate, icon: const Icon(Icons.calendar_month, size: 16), label: Text(_purchaseDay == null ? 'PURCHASE DATE' : 'PURCHASED ${dateOfEpochDay(_purchaseDay!).day}/${dateOfEpochDay(_purchaseDay!).month}/${dateOfEpochDay(_purchaseDay!).year}', style: mono(context, size: 7.5, color: p.accent)))),
+                ]),
+                if (_purchaseDay != null) Align(alignment: Alignment.centerRight, child: TextButton(onPressed: () => setState(() => _purchaseDay = null), child: const Text('CLEAR PURCHASE DATE'))),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _notes,

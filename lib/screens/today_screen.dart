@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../data/calendar_feed.dart';
 import '../models/event.dart';
 import '../models/habit.dart';
+import '../domain/targets.dart';
 import '../state/app_state.dart';
 import '../state/event_store.dart';
 import '../state/habit_store.dart';
@@ -162,7 +163,17 @@ class TodayScreen extends StatelessWidget {
                         habit: habit,
                         doneToday: habits.doneToday(habit.id),
                         streak: habits.currentStreak(habit),
-                        onToggle: () => habits.toggle(habit.id),
+                        currentValue: habits.logOn(habit.id, epochDayOf(DateTime.now()))?.value ?? 0,
+                        target: Targets.target(habit, DateTime.now()),
+                        onToggle: () {
+                          if (habit.type == HabitType.counter) {
+                            habits.addValue(habit.id, 1);
+                          } else if (habit.type == HabitType.timer) {
+                            habits.addValue(habit.id, 5);
+                          } else {
+                            habits.toggle(habit.id);
+                          }
+                        },
                       ),
                     ],
                     if (habits.habits.length > 4)
@@ -629,6 +640,8 @@ class _HabitRow extends StatelessWidget {
     required this.habit,
     required this.doneToday,
     required this.streak,
+    required this.currentValue,
+    required this.target,
     required this.onToggle,
   });
 
@@ -636,6 +649,8 @@ class _HabitRow extends StatelessWidget {
   final Habit habit;
   final bool doneToday;
   final int streak;
+  final int currentValue;
+  final int target;
   final VoidCallback onToggle;
 
   @override
@@ -652,14 +667,23 @@ class _HabitRow extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              habit.title,
-              style: TextStyle(
-                color: doneToday ? palette.dim : palette.text,
-                fontSize: 12.5,
-                decoration: doneToday ? TextDecoration.lineThrough : null,
-                decorationColor: palette.dim,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  habit.title,
+                  style: TextStyle(
+                    color: doneToday ? palette.dim : palette.text,
+                    fontSize: 12.5,
+                    decoration: doneToday ? TextDecoration.lineThrough : null,
+                    decorationColor: palette.dim,
+                  ),
+                ),
+                if (habit.type == HabitType.counter || habit.type == HabitType.timer)
+                  Text('$currentValue/$target ${habit.type == HabitType.timer ? 'min' : habit.unit}'.trim(), style: mono(context, size: 7.5, color: palette.dim))
+                else if (habit.type == HabitType.checklist)
+                  Text('$currentValue/${habit.checklistItems.length} items', style: mono(context, size: 7.5, color: palette.dim)),
+              ],
             ),
           ),
           const SizedBox(width: 10),

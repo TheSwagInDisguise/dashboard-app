@@ -415,7 +415,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     label: 'SAVE URL',
                     onTap: () async {
                       await app.setIcalUrl(_icalController.text);
-                      if (context.mounted) await context.read<CalendarFeed>().refresh();
+                      if (context.mounted) {
+                        await context.read<CalendarFeed>().refresh();
+                      }
                       if (context.mounted) _snack('calendar URL saved');
                     },
                   ),
@@ -451,26 +453,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 8),
         _Panel(
           palette: p,
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(Icons.ios_share, color: p.dim, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('everything, one file', style: TextStyle(color: p.text, fontSize: 13)),
-                    const SizedBox(height: 2),
-                    Text('tasks · events · habits · habit logs', style: mono(context, size: 8.5, color: p.dim)),
-                  ],
-                ),
-              ),
-              _TerminalButton(
-                palette: p,
-                label: 'EXPORT',
-                small: true,
-                onTap: () => exportJsonBackup(context),
-              ),
+              Row(children: [
+                Icon(Icons.ios_share, color: p.dim, size: 20),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('everything, one file', style: TextStyle(color: p.text, fontSize: 13)),
+                  const SizedBox(height: 2),
+                  Text('tasks · events · habits · watches · straps · services', style: mono(context, size: 8.5, color: p.dim)),
+                ])),
+              ]),
+              const SizedBox(height: 8),
+              Wrap(alignment: WrapAlignment.end, spacing: 8, children: [
+                _TerminalButton(palette: p, label: 'IMPORT / MERGE', small: true, onTap: () => importJsonBackup(context)),
+                _TerminalButton(palette: p, label: 'EXPORT', small: true, onTap: () => exportJsonBackup(context)),
+              ]),
             ],
           ),
         ),
