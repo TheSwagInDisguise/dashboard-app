@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -82,17 +82,14 @@ Future<void> exportJsonBackup(BuildContext context) async {
 Future<void> importJsonBackup(BuildContext context) async {
   final messenger = ScaffoldMessenger.of(context);
   try {
-    final picked = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['json'],
-      withData: true,
+    final file = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'DayDeck JSON backup', extensions: ['json']),
+      ],
     );
-    if (picked == null || picked.files.isEmpty) return;
-    final file = picked.files.single;
-    final bytes =
-        file.bytes ??
-        (file.path == null ? null : await File(file.path!).readAsBytes());
-    if (bytes == null || bytes.isEmpty) {
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    if (bytes.isEmpty) {
       throw const FormatException('The selected file is empty or unreadable.');
     }
     if (bytes.length > 50 * 1024 * 1024) {

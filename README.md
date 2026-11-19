@@ -14,7 +14,7 @@
 
 ## Status
 
-**v0.12.0** — adds the full habit editor (checkboxes, counters, timers, checklists, schedules, targets, reminders, ramps, anchors and life areas), late-log and shield repair controls, Today command prompt, weekly review + 12-week heatmap, watch rotation/strap/service tools, and safe JSON backup import/merge. Android APK and unsigned iOS IPA are published through GitHub Releases; iPhone installs use Signulous. Sync remains compatible with existing `dashboard-data` records; watch photos remain device-local. See [PROJECT_NOTES.md](PROJECT_NOTES.md) for release and test details.
+**v0.12.0 candidate — release pending native CI**. Adds the full habit editor (checkboxes, counters, timers, checklists, schedules, targets, reminders, ramps, anchors and life areas), late-log and shield repair controls, Today command prompt, weekly review + 12-week heatmap, watch rotation/strap/service tools, and safe JSON backup import/merge. Existing Android APK and unsigned iOS IPA remain on v0.11.0 while the candidate builds are verified. Sync stays compatible with existing `dashboard-data` records; watch photos remain device-local. See [PROJECT_NOTES.md](PROJECT_NOTES.md) for release and test details.
 
 ## iPhone-sized screenshots
 
