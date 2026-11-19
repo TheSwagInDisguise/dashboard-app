@@ -39,6 +39,11 @@ enum SyncStatus {
   error,
 }
 
+Future<void> Function(List<dynamic>) _dynamicApply<T>(
+  Future<void> Function(List<T>) apply,
+) =>
+    (items) => apply(items.cast<T>());
+
 /// One synced JSON document in the private dashboard-data repo.
 /// Everything the engine needs, parameterised — so tasks, events, habits and
 /// habit logs all flow through the *same* merge logic.
@@ -47,7 +52,7 @@ class _Doc<T> {
     required this.path,
     required this.displayName,
     required this.snapshot,
-    required this.apply,
+    required Future<void> Function(List<T>) apply,
     required this.fromJson,
     required this.toJson,
     required this.semanticallyDifferent,
@@ -55,12 +60,12 @@ class _Doc<T> {
     required this.createdAtOf,
     required this.idOf,
     required this.titleOf,
-  });
+  }) : applyDynamic = _dynamicApply<T>(apply);
 
   final String path;
   final String displayName;
   final List<T> Function() snapshot;
-  final Future<void> Function(List<T>) apply;
+  final Future<void> Function(List<dynamic>) applyDynamic;
   final T Function(Map<String, dynamic>) fromJson;
   final Map<String, dynamic> Function(T) toJson;
   final bool Function(T a, T b) semanticallyDifferent;
@@ -68,6 +73,20 @@ class _Doc<T> {
   final DateTime Function(T) createdAtOf;
   final String Function(T) idOf;
   final String Function(T) titleOf;
+
+  T parse(Map<String, dynamic> value) => Function.apply(fromJson, [value]) as T;
+  Map<String, dynamic> encode(T item) =>
+      Function.apply(toJson, [item]) as Map<String, dynamic>;
+  bool different(T a, T b) =>
+      Function.apply(semanticallyDifferent, [a, b]) as bool;
+  DateTime updatedAt(T item) => Function.apply(updatedAtOf, [item]) as DateTime;
+  DateTime createdAt(T item) => Function.apply(createdAtOf, [item]) as DateTime;
+  Future<void> applyItems(List<dynamic> items) async {
+    await applyDynamic(items);
+  }
+
+  String id(T item) => Function.apply(idOf, [item]) as String;
+  String title(T item) => Function.apply(titleOf, [item]) as String;
 }
 
 /// Keeps on-device documents in sync with the user's PRIVATE GitHub data
@@ -78,6 +97,17 @@ class _Doc<T> {
 /// Sync happens on app open, on resume (via the UI), and debounced after
 /// local mutations. No background service; nothing runs when the app isn't
 /// in the foreground.
+class BackupMergeResult {
+  const BackupMergeResult({
+    required this.documents,
+    required this.records,
+    required this.conflicts,
+  });
+  final int documents;
+  final int records;
+  final int conflicts;
+}
+
 class SyncService extends ChangeNotifier {
   SyncService({
     required TasksStore tasksStore,
@@ -86,12 +116,12 @@ class SyncService extends ChangeNotifier {
     required WatchStore watchStore,
     required FocusStore focusStore,
     required AppState appState,
-  })  : _tasks = tasksStore,
-        _events = eventStore,
-        _habits = habitStore,
-        _watches = watchStore,
-        _focus = focusStore,
-        _appState = appState {
+  }) : _tasks = tasksStore,
+       _events = eventStore,
+       _habits = habitStore,
+       _watches = watchStore,
+       _focus = focusStore,
+       _appState = appState {
     _docs = <_Doc<dynamic>>[
       _Doc<Task>(
         path: 'tasks.json',
@@ -223,6 +253,45 @@ class SyncService extends ChangeNotifier {
         idOf: (w) => w.id,
         titleOf: (w) => 'wear on ${w.toJson()['date']}',
       ),
+      _Doc<Strap>(
+        path: 'straps.json',
+        displayName: 'watch straps',
+        snapshot: watchStore.snapshotStraps,
+        apply: watchStore.replaceAllStraps,
+        fromJson: Strap.fromJson,
+        toJson: (x) => x.toJson(),
+        semanticallyDifferent: strapSemanticallyDifferent,
+        updatedAtOf: (x) => x.updatedAt,
+        createdAtOf: (x) => x.createdAt,
+        idOf: (x) => x.id,
+        titleOf: (x) => x.name,
+      ),
+      _Doc<StrapSwap>(
+        path: 'strap_swaps.json',
+        displayName: 'strap swap log',
+        snapshot: watchStore.snapshotStrapSwaps,
+        apply: watchStore.replaceAllStrapSwaps,
+        fromJson: StrapSwap.fromJson,
+        toJson: (x) => x.toJson(),
+        semanticallyDifferent: strapSwapSemanticallyDifferent,
+        updatedAtOf: (x) => x.updatedAt,
+        createdAtOf: (x) => x.createdAt,
+        idOf: (x) => x.id,
+        titleOf: (x) => 'strap swap · ${x.day}',
+      ),
+      _Doc<WatchService>(
+        path: 'watch_services.json',
+        displayName: 'watch service log',
+        snapshot: watchStore.snapshotServices,
+        apply: watchStore.replaceAllServices,
+        fromJson: WatchService.fromJson,
+        toJson: (x) => x.toJson(),
+        semanticallyDifferent: watchServiceSemanticallyDifferent,
+        updatedAtOf: (x) => x.updatedAt,
+        createdAtOf: (x) => x.createdAt,
+        idOf: (x) => x.id,
+        titleOf: (x) => 'service ${x.kind} · ${x.day}',
+      ),
       _Doc<FocusSession>(
         path: 'focus_sessions.json',
         displayName: 'focus sessions',
@@ -305,6 +374,67 @@ class SyncService extends ChangeNotifier {
 
   // ================= sync engine =================
 
+  /// Import a DayDeck JSON backup as a non-destructive LWW merge. Records
+  /// present only in the backup are unioned; divergent versions are parked in
+  /// the same conflict queue as a device sync.
+  Future<BackupMergeResult> mergeBackup(Map<String, dynamic> payload) async {
+    const keys = <String, String>{
+      'tasks.json': 'tasks',
+      'events.json': 'events',
+      'habits.json': 'habits',
+      'habit_logs.json': 'habit_logs',
+      'routines.json': 'routines',
+      'skip_rules.json': 'skip_rules',
+      'shield_uses.json': 'shield_uses',
+      'xp_events.json': 'xp_events',
+      'watches.json': 'watches',
+      'wear_logs.json': 'wear_logs',
+      'straps.json': 'straps',
+      'strap_swaps.json': 'strap_swaps',
+      'watch_services.json': 'watch_services',
+      'focus_sessions.json': 'focus_sessions',
+    };
+    var documents = 0;
+    var records = 0;
+    var conflicts = 0;
+    for (final doc in _docs) {
+      final key = keys[doc.path];
+      final raw = key == null ? null : payload[key];
+      if (raw is! List) {
+        continue; // older schema: leave unrepresented local data intact
+      }
+      final incoming = <dynamic>[];
+      for (final value in raw) {
+        if (value is! Map) continue;
+        try {
+          final item = doc.parse(Map<String, dynamic>.from(value));
+          if (doc.id(item).isNotEmpty) incoming.add(item);
+        } catch (_) {
+          // Ignore only the malformed item; continue recovering good records.
+        }
+      }
+      if (incoming.isEmpty) continue;
+      final outcome = mergeLww<dynamic>(
+        doc.snapshot(),
+        incoming,
+        idOf: doc.id,
+        updatedAtOf: doc.updatedAt,
+        semanticallyDifferent: doc.different,
+        canonicalOf: (item) => jsonEncode(doc.encode(item)),
+      );
+      await doc.applyItems(outcome.merged);
+      await _recordConflicts(outcome.losers, doc);
+      documents++;
+      records += incoming.length;
+      conflicts += outcome.losers.length;
+    }
+    return BackupMergeResult(
+      documents: documents,
+      records: records,
+      conflicts: conflicts,
+    );
+  }
+
   /// One full sync pass over every document. Concurrent calls coalesce into
   /// at most one extra run.
   Future<void> syncNow() async {
@@ -371,56 +501,72 @@ class SyncService extends ChangeNotifier {
     }
   }
 
-  Future<SyncStatus> _syncDocument<T>(GitHubClient client, _Doc<T> doc, DateTime passStart) async {
+  Future<SyncStatus> _syncDocument<T>(
+    GitHubClient client,
+    _Doc<T> doc,
+    DateTime passStart,
+  ) async {
     for (var attempt = 0; attempt < 2; attempt++) {
       final remote = await client.getFile(doc.path);
-      if (remote.status == SyncFileStatus.tokenInvalid) return SyncStatus.tokenInvalid;
+      if (remote.status == SyncFileStatus.tokenInvalid) {
+        return SyncStatus.tokenInvalid;
+      }
       if (remote.status == SyncFileStatus.error) {
         _lastError = '${doc.displayName}: ${remote.error}';
         return SyncStatus.error;
       }
 
-      final List<T> remoteItems = remote.exists ? _decodeItems(remote.content!, doc) : <T>[];
+      final List<T> remoteItems = remote.exists
+          ? _decodeItems(remote.content!, doc)
+          : <T>[];
       final List<T> localItems = doc.snapshot();
       final outcome = mergeLww<T>(
         localItems,
         remoteItems,
-        idOf: doc.idOf,
-        updatedAtOf: doc.updatedAtOf,
-        semanticallyDifferent: doc.semanticallyDifferent,
-        canonicalOf: (t) => jsonEncode(doc.toJson(t)),
+        idOf: doc.id,
+        updatedAtOf: doc.updatedAt,
+        semanticallyDifferent: doc.different,
+        canonicalOf: (t) => jsonEncode(doc.encode(t)),
       );
 
       // Overlay anything that changed locally while this pass was running —
       // it wins outright so we never clobber a fresh edit.
-      final mergedById = <String, T>{for (final item in outcome.merged) doc.idOf(item): item};
+      final mergedById = <String, T>{
+        for (final item in outcome.merged) doc.id(item): item,
+      };
       for (final localItem in doc.snapshot()) {
-        if (doc.updatedAtOf(localItem).isAfter(passStart)) {
-          mergedById[doc.idOf(localItem)] = localItem;
+        if (doc.updatedAt(localItem).isAfter(passStart)) {
+          mergedById[doc.id(localItem)] = localItem;
         }
       }
-      final mergedNow = mergedById.values.toList()..sort((a, b) => doc.idOf(a).compareTo(doc.idOf(b)));
+      final mergedNow = mergedById.values.toList()
+        ..sort((a, b) => doc.id(a).compareTo(doc.id(b)));
 
       // Apply locally only if it actually differs (skip notify storms).
-      if (!itemsEqualOf(mergedNow, localItems, doc.toJson, doc.idOf)) {
+      if (!itemsEqualOf(mergedNow, localItems, doc.encode, doc.id)) {
         _applyingRemote = true;
         try {
-          await doc.apply(mergedNow);
+          await doc.applyItems(mergedNow);
         } finally {
           _applyingRemote = false;
         }
       }
 
       // Push only if the repo's copy differs.
-      if (!itemsEqualOf(mergedNow, remoteItems, doc.toJson, doc.idOf)) {
+      if (!itemsEqualOf(mergedNow, remoteItems, doc.encode, doc.id)) {
         final put = await client.putFile(
           doc.path,
           _encodeItems(mergedNow, doc),
           sha: remote.sha,
-          message: 'daydeck: sync ${doc.path} ${DateTime.now().toUtc().toIso8601String()}',
+          message:
+              'daydeck: sync ${doc.path} ${DateTime.now().toUtc().toIso8601String()}',
         );
-        if (put.status == SyncPutStatus.conflict) continue; // raced — re-read & re-merge
-        if (put.status == SyncPutStatus.tokenInvalid) return SyncStatus.tokenInvalid;
+        if (put.status == SyncPutStatus.conflict) {
+          continue; // raced — re-read & re-merge
+        }
+        if (put.status == SyncPutStatus.tokenInvalid) {
+          return SyncStatus.tokenInvalid;
+        }
         if (!put.succeeded) {
           _lastError = '${doc.displayName}: ${put.error}';
           return SyncStatus.error;
@@ -433,7 +579,8 @@ class SyncService extends ChangeNotifier {
       return SyncStatus.ok;
     }
 
-    _lastError = 'sync raced with another writer on ${doc.displayName} — try again';
+    _lastError =
+        'sync raced with another writer on ${doc.displayName} — try again';
     return SyncStatus.error;
   }
 
@@ -464,7 +611,11 @@ class SyncService extends ChangeNotifier {
         final key = jsonEncode([e['when'], e['doc'], e['id'], e['side']]);
         if (seen.add(key)) merged.add(e);
       }
-      merged.sort((a, b) => (b['when'] ?? '').toString().compareTo((a['when'] ?? '').toString()));
+      merged.sort(
+        (a, b) => (b['when'] ?? '').toString().compareTo(
+          (a['when'] ?? '').toString(),
+        ),
+      );
       return merged;
     } catch (_) {
       return pending;
@@ -507,30 +658,38 @@ class SyncService extends ChangeNotifier {
           if (title.isEmpty) return false;
           await _habits.addHabitRaw(
             title: title,
-            cadence: (map['cadence'] ?? (map['schedule'] == 'weekly' ? 'weekly' : 'daily')).toString(),
+            cadence:
+                (map['cadence'] ??
+                        (map['schedule'] == 'weekly' ? 'weekly' : 'daily'))
+                    .toString(),
           );
           return true;
         case 'routines.json':
           final name = (map['name'] ?? '').toString().trim();
           if (name.isEmpty) return false;
-          await _habits.addRoutine(name: name, icon: (map['icon'] ?? '>').toString());
+          await _habits.addRoutine(
+            name: name,
+            icon: (map['icon'] ?? '>').toString(),
+          );
           return true;
         case 'skip_rules.json':
           final name = (map['name'] ?? '').toString().trim();
           if (name.isEmpty) return false;
           final now = DateTime.now().toUtc();
-          await _habits.addSkipRule(SkipRule(
-            id: 'conflict', // addSkipRule re-ids
-            name: name,
-            kind: (map['kind'] ?? SkipRule.kindRange).toString(),
-            fromDay: (map['fromDay'] as num?)?.toInt(),
-            toDay: (map['toDay'] as num?)?.toInt(),
-            weekdayMask: (map['weekdayMask'] as num?)?.toInt() ?? 0,
-            habitIds: (map['habitIds'] ?? '').toString(),
-            enabled: map['enabled'] != false,
-            createdAt: now,
-            updatedAt: now,
-          ));
+          await _habits.addSkipRule(
+            SkipRule(
+              id: 'conflict', // addSkipRule re-ids
+              name: name,
+              kind: (map['kind'] ?? SkipRule.kindRange).toString(),
+              fromDay: (map['fromDay'] as num?)?.toInt(),
+              toDay: (map['toDay'] as num?)?.toInt(),
+              weekdayMask: (map['weekdayMask'] as num?)?.toInt() ?? 0,
+              habitIds: (map['habitIds'] ?? '').toString(),
+              enabled: map['enabled'] != false,
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
           return true;
         case 'shield_uses.json':
           final habitId = map['habitId']?.toString() ?? '';
@@ -562,13 +721,57 @@ class SyncService extends ChangeNotifier {
             color: (map['color'] ?? 'cyan').toString(),
             status: (map['status'] ?? Watch.statusOwned).toString(),
             notes: (map['notes'] ?? '').toString(),
+            serviceIntervalMonths:
+                (map['serviceIntervalMonths'] as num?)?.toInt() ?? 0,
+            purchaseDay: (map['purchaseDay'] as num?)?.toInt(),
           );
           return true;
         case 'wear_logs.json':
           final watchId = map['watchId']?.toString() ?? '';
           final day = (map['day'] as num?)?.toInt();
           if (watchId.isEmpty || day == null) return false;
-          await _watches.addWearRaw(watchId: watchId, day: day, note: (map['note'] ?? '').toString());
+          await _watches.addWearRaw(
+            watchId: watchId,
+            day: day,
+            note: (map['note'] ?? '').toString(),
+          );
+          return true;
+        case 'straps.json':
+          final name = (map['name'] ?? '').toString().trim();
+          if (name.isEmpty) return false;
+          await _watches.addStrapRaw(
+            name: name,
+            material: (map['material'] ?? '').toString(),
+            color: (map['color'] ?? '').toString(),
+            widthMm: (map['widthMm'] as num?)?.toInt(),
+            watchId: map['watchId']?.toString(),
+            notes: (map['notes'] ?? '').toString(),
+          );
+          return true;
+        case 'strap_swaps.json':
+          final strapId = map['strapId']?.toString() ?? '';
+          final day = (map['day'] as num?)?.toInt();
+          if (strapId.isEmpty || day == null) return false;
+          await _watches.addStrapSwapRaw(
+            strapId: strapId,
+            watchId: map['watchId']?.toString(),
+            day: day,
+            note: (map['note'] ?? '').toString(),
+          );
+          return true;
+        case 'watch_services.json':
+          final watchId = map['watchId']?.toString() ?? '';
+          final day = (map['day'] as num?)?.toInt();
+          if (watchId.isEmpty || day == null) return false;
+          await _watches.addServiceRaw(
+            watchId: watchId,
+            day: day,
+            kind: (map['kind'] ?? 'service').toString(),
+            description: (map['description'] ?? '').toString(),
+            cost: (map['cost'] as num?)?.toDouble(),
+            currency: (map['currency'] ?? '').toString(),
+            nextDueDay: (map['nextDueDay'] as num?)?.toInt(),
+          );
           return true;
         case 'focus_sessions.json':
           final minutes = (map['minutes'] as num?)?.toInt() ?? 0;
@@ -577,7 +780,10 @@ class SyncService extends ChangeNotifier {
           if (minutes < 1 || startedAt == null || endedAt == null) return false;
           await _focus.recordSession(
             habitId: (map['habitId'] ?? '0').toString(),
-            startedAt: DateTime.fromMillisecondsSinceEpoch(startedAt, isUtc: true),
+            startedAt: DateTime.fromMillisecondsSinceEpoch(
+              startedAt,
+              isUtc: true,
+            ),
             endedAt: DateTime.fromMillisecondsSinceEpoch(endedAt, isUtc: true),
             minutes: minutes,
             kind: (map['kind'] ?? FocusSession.kindFocus).toString(),
@@ -592,17 +798,20 @@ class SyncService extends ChangeNotifier {
     }
   }
 
-  Future<void> _recordConflicts<T>(List<MergeLoser<T>> losers, _Doc<T> doc) async {
+  Future<void> _recordConflicts<T>(
+    List<MergeLoser<T>> losers,
+    _Doc<T> doc,
+  ) async {
     final pending = await _loadPendingConflicts();
     final now = DateTime.now().toUtc().toIso8601String();
     for (final loser in losers) {
       pending.add({
         'when': now,
         'doc': doc.path,
-        'id': doc.idOf(loser.item),
-        'title': doc.titleOf(loser.item),
+        'id': doc.id(loser.item),
+        'title': doc.title(loser.item),
         'side': loser.side,
-        'item': doc.toJson(loser.item),
+        'item': doc.encode(loser.item),
       });
     }
     await _savePendingConflicts(pending);
@@ -612,18 +821,24 @@ class SyncService extends ChangeNotifier {
     final pending = await _loadPendingConflicts();
 
     final remote = await client.getFile(_conflictsPath);
-    if (remote.status == SyncFileStatus.tokenInvalid || remote.status == SyncFileStatus.error) {
+    if (remote.status == SyncFileStatus.tokenInvalid ||
+        remote.status == SyncFileStatus.error) {
       // Keep everything pending; retry next sync. Nothing is lost.
       return;
     }
 
-    final List<Map<String, dynamic>> remoteEntries = remote.exists ? _decodeConflicts(remote.content!) : <Map<String, dynamic>>[];
+    final List<Map<String, dynamic>> remoteEntries = remote.exists
+        ? _decodeConflicts(remote.content!)
+        : <Map<String, dynamic>>[];
 
     if (pending.isEmpty) {
       if (!remote.exists) {
         await client.putFile(
           _conflictsPath,
-          jsonEncode({'schemaVersion': 1, 'conflicts': <Map<String, dynamic>>[]}),
+          jsonEncode({
+            'schemaVersion': 1,
+            'conflicts': <Map<String, dynamic>>[],
+          }),
           message: 'daydeck: seed conflicts.json',
         );
       }
@@ -636,13 +851,16 @@ class SyncService extends ChangeNotifier {
       final key = jsonEncode([e['when'], e['doc'], e['id'], e['side']]);
       if (seen.add(key)) merged.add(e);
     }
-    final capped = merged.length > 200 ? merged.sublist(merged.length - 200) : merged;
+    final capped = merged.length > 200
+        ? merged.sublist(merged.length - 200)
+        : merged;
 
     final put = await client.putFile(
       _conflictsPath,
       jsonEncode({'schemaVersion': 1, 'conflicts': capped}),
       sha: remote.sha,
-      message: 'daydeck: park ${pending.length} sync conflict${pending.length == 1 ? '' : 's'}',
+      message:
+          'daydeck: park ${pending.length} sync conflict${pending.length == 1 ? '' : 's'}',
     );
 
     if (put.succeeded) {
@@ -681,8 +899,8 @@ class SyncService extends ChangeNotifier {
           : (decoded is List ? decoded : <dynamic>[]);
       return list
           .whereType<Map>()
-          .map((e) => doc.fromJson(Map<String, dynamic>.from(e)))
-          .where((t) => doc.idOf(t).isNotEmpty)
+          .map((e) => doc.parse(Map<String, dynamic>.from(e)))
+          .where((t) => doc.id(t).isNotEmpty)
           .toList();
     } catch (_) {
       // A corrupt remote document must not break anything: treat it as empty,
@@ -692,18 +910,24 @@ class SyncService extends ChangeNotifier {
   }
 
   String _encodeItems<T>(List<T> items, _Doc<T> doc) {
-    final sorted = [...items]..sort((a, b) => doc.idOf(a).compareTo(doc.idOf(b)));
+    final sorted = [...items]..sort((a, b) => doc.id(a).compareTo(doc.id(b)));
     return jsonEncode({
       'schemaVersion': 1,
-      'items': sorted.map(doc.toJson).toList(),
+      'items': sorted.map(doc.encode).toList(),
     });
   }
 
   List<Map<String, dynamic>> _decodeConflicts(String raw) {
     try {
       final decoded = jsonDecode(raw);
-      final list = decoded is Map<String, dynamic> && decoded['conflicts'] is List ? decoded['conflicts'] as List : <dynamic>[];
-      return list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      final list =
+          decoded is Map<String, dynamic> && decoded['conflicts'] is List
+          ? decoded['conflicts'] as List
+          : <dynamic>[];
+      return list
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
     } catch (_) {
       return <Map<String, dynamic>>[];
     }
@@ -716,13 +940,18 @@ class SyncService extends ChangeNotifier {
       if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
       final decoded = jsonDecode(raw);
       if (decoded is! List) return <Map<String, dynamic>>[];
-      return decoded.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      return decoded
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
     } catch (_) {
       return <Map<String, dynamic>>[];
     }
   }
 
-  Future<void> _savePendingConflicts(List<Map<String, dynamic>> conflicts) async {
+  Future<void> _savePendingConflicts(
+    List<Map<String, dynamic>> conflicts,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       if (conflicts.isEmpty) {
@@ -730,7 +959,9 @@ class SyncService extends ChangeNotifier {
         return;
       }
       // Cap the local queue; oldest beyond 500 are dropped (remote caps at 200).
-      final capped = conflicts.length > 500 ? conflicts.sublist(conflicts.length - 500) : conflicts;
+      final capped = conflicts.length > 500
+          ? conflicts.sublist(conflicts.length - 500)
+          : conflicts;
       await prefs.setString(_pendingKey, jsonEncode(capped));
     } catch (_) {}
   }

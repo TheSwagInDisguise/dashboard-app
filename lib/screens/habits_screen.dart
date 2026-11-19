@@ -8,6 +8,8 @@ import '../state/json_doc_store.dart';
 import '../theme/app_theme.dart';
 import '../theme/palettes.dart';
 import '../widgets/section_header.dart';
+import '../widgets/habit_insight_strip.dart';
+import '../widgets/habit_review.dart';
 import '../widgets/terminal_card.dart';
 import '../widgets/terminal_chip.dart';
 
@@ -43,6 +45,10 @@ class HabitsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 18),
 
+          WeeklyReviewCard(palette: p),
+          const SizedBox(height: 10),
+          HabitsHeatmap(palette: p),
+          const SizedBox(height: 14),
           SectionHeader(palette: p, title: 'YOUR HABITS', trailing: habits.isEmpty ? 'empty' : '${habits.where((h) => store.doneToday(h.id)).length}/${habits.length} today'),
           const SizedBox(height: 8),
           if (habits.isEmpty)
@@ -89,14 +95,20 @@ class HabitsScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(color: p.border),
                           ),
-                          child: _HabitCardRow(
-                            palette: p,
-                            habit: habit,
-                            doneToday: store.doneToday(habit.id),
-                            streak: store.currentStreak(habit),
-                            weekDots: store.thisWeekDots(habit),
-                            onToggle: () => store.toggle(habit.id),
-                            onEdit: () => _showHabitSheet(context, initial: habit),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _HabitCardRow(
+                                palette: p,
+                                habit: habit,
+                                doneToday: store.doneToday(habit.id),
+                                streak: store.currentStreak(habit),
+                                weekDots: store.thisWeekDots(habit),
+                                onToggle: () => store.toggle(habit.id),
+                                onEdit: () => _showHabitSheet(context, initial: habit),
+                              ),
+                              HabitInsightStrip(palette: p, habit: habit, store: store, compact: true),
+                            ],
                           ),
                         ),
                       ),
@@ -112,14 +124,20 @@ class HabitsScreen extends StatelessWidget {
               children: [
                 for (final habit in habits) ...[
                   if (habit != habits.first) TerminalCardRule(palette: p),
-                  _HabitCardRow(
-                    palette: p,
-                    habit: habit,
-                    doneToday: store.doneToday(habit.id),
-                    streak: store.currentStreak(habit),
-                    weekDots: store.thisWeekDots(habit),
-                    onToggle: () => store.toggle(habit.id),
-                    onEdit: () => _showHabitSheet(context, initial: habit),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _HabitCardRow(
+                        palette: p,
+                        habit: habit,
+                        doneToday: store.doneToday(habit.id),
+                        streak: store.currentStreak(habit),
+                        weekDots: store.thisWeekDots(habit),
+                        onToggle: () => store.toggle(habit.id),
+                        onEdit: () => _showHabitSheet(context, initial: habit),
+                      ),
+                      HabitInsightStrip(palette: p, habit: habit, store: store, compact: true),
+                    ],
                   ),
                 ],
                 const SizedBox(height: 6),

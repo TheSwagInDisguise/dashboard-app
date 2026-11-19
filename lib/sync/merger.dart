@@ -34,13 +34,21 @@ class MergeOutcome<T> {
 }
 
 /// Stable, canonical JSON for a list — used for change detection.
-String canonicalItemsOf<T>(List<T> items, Map<String, dynamic> Function(T) toJson, String Function(T) idOf) {
+String canonicalItemsOf<T>(
+  List<T> items,
+  Map<String, dynamic> Function(T) toJson,
+  String Function(T) idOf,
+) {
   final sorted = [...items]..sort((a, b) => idOf(a).compareTo(idOf(b)));
   return jsonEncode(sorted.map(toJson).toList());
 }
 
-bool itemsEqualOf<T>(List<T> a, List<T> b, Map<String, dynamic> Function(T) toJson, String Function(T) idOf) =>
-    canonicalItemsOf(a, toJson, idOf) == canonicalItemsOf(b, toJson, idOf);
+bool itemsEqualOf<T>(
+  List<T> a,
+  List<T> b,
+  Map<String, dynamic> Function(T) toJson,
+  String Function(T) idOf,
+) => canonicalItemsOf(a, toJson, idOf) == canonicalItemsOf(b, toJson, idOf);
 
 MergeOutcome<T> mergeLww<T>(
   List<T> local,
@@ -66,11 +74,17 @@ MergeOutcome<T> mergeLww<T>(
     }
     final winner = _newerOf(localItem, remoteItem, updatedAtOf, canonicalOf);
     final localWon = identical(winner, localItem);
-    losers.add(MergeLoser<T>(item: localWon ? remoteItem : localItem, side: localWon ? 'remote' : 'local'));
+    losers.add(
+      MergeLoser<T>(
+        item: localWon ? remoteItem : localItem,
+        side: localWon ? 'remote' : 'local',
+      ),
+    );
     byId[id] = winner;
   }
 
-  final merged = byId.values.toList()..sort((a, b) => idOf(a).compareTo(idOf(b)));
+  final merged = byId.values.toList()
+    ..sort((a, b) => idOf(a).compareTo(idOf(b)));
   return MergeOutcome<T>(merged: merged, losers: losers);
 }
 
@@ -91,7 +105,8 @@ T _newerOf<T>(
 
 // ---------------- Task wrappers (Phase 3 API kept intact) ----------------
 
-MergeOutcome<Task> mergeTasks(List<Task> local, List<Task> remote) => mergeLww<Task>(
+MergeOutcome<Task> mergeTasks(List<Task> local, List<Task> remote) =>
+    mergeLww<Task>(
       local,
       remote,
       idOf: (t) => t.id,
@@ -103,7 +118,8 @@ MergeOutcome<Task> mergeTasks(List<Task> local, List<Task> remote) => mergeLww<T
 String canonicalItems(List<Task> items) =>
     canonicalItemsOf(items, (t) => t.toJson(), (t) => t.id);
 
-bool itemsEqual(List<Task> a, List<Task> b) => itemsEqualOf(a, b, (t) => t.toJson(), (t) => t.id);
+bool itemsEqual(List<Task> a, List<Task> b) =>
+    itemsEqualOf(a, b, (t) => t.toJson(), (t) => t.id);
 
 bool _semanticallyDifferent(Task a, Task b) =>
     a.title != b.title ||
@@ -129,7 +145,9 @@ bool eventSemanticallyDifferent(Event a, Event b) {
 bool habitSemanticallyDifferent(Habit a, Habit b) {
   // Compare the canonical sync payload (photo-free by construction).
   Map<String, dynamic> flat(Habit h) {
-    final m = Map<String, dynamic>.from(h.toJson())..remove('createdAt')..remove('updatedAt');
+    final m = Map<String, dynamic>.from(h.toJson())
+      ..remove('createdAt')
+      ..remove('updatedAt');
     return m;
   }
 
@@ -137,13 +155,22 @@ bool habitSemanticallyDifferent(Habit a, Habit b) {
 }
 
 bool habitLogSemanticallyDifferent(HabitLog a, HabitLog b) {
-  final ja = a.toJson()..remove('createdAt')..remove('updatedAt')..remove('date');
-  final jb = b.toJson()..remove('createdAt')..remove('updatedAt')..remove('date');
+  final ja = a.toJson()
+    ..remove('createdAt')
+    ..remove('updatedAt')
+    ..remove('date');
+  final jb = b.toJson()
+    ..remove('createdAt')
+    ..remove('updatedAt')
+    ..remove('date');
   return jsonEncode(ja) != jsonEncode(jb);
 }
 
 bool routineSemanticallyDifferent(Routine a, Routine b) =>
-    a.name != b.name || a.icon != b.icon || a.position != b.position || a.deleted != b.deleted;
+    a.name != b.name ||
+    a.icon != b.icon ||
+    a.position != b.position ||
+    a.deleted != b.deleted;
 
 bool skipRuleSemanticallyDifferent(SkipRule a, SkipRule b) =>
     a.name != b.name ||
@@ -159,7 +186,11 @@ bool shieldUseSemanticallyDifferent(ShieldUse a, ShieldUse b) =>
     a.habitId != b.habitId || a.day != b.day || a.deleted != b.deleted;
 
 bool xpEventSemanticallyDifferent(XpEvent a, XpEvent b) =>
-    a.day != b.day || a.amount != b.amount || a.reason != b.reason || a.habitId != b.habitId || a.deleted != b.deleted;
+    a.day != b.day ||
+    a.amount != b.amount ||
+    a.reason != b.reason ||
+    a.habitId != b.habitId ||
+    a.deleted != b.deleted;
 
 bool focusSessionSemanticallyDifferent(FocusSession a, FocusSession b) =>
     a.habitId != b.habitId ||
@@ -182,7 +213,39 @@ bool watchSemanticallyDifferent(Watch a, Watch b) =>
     a.notes != b.notes ||
     a.status != b.status ||
     a.archived != b.archived ||
+    a.serviceIntervalMonths != b.serviceIntervalMonths ||
+    a.purchaseDay != b.purchaseDay ||
     a.deleted != b.deleted;
 
 bool wearLogSemanticallyDifferent(WearLog a, WearLog b) =>
-    a.watchId != b.watchId || a.day != b.day || a.note != b.note || a.deleted != b.deleted;
+    a.watchId != b.watchId ||
+    a.day != b.day ||
+    a.note != b.note ||
+    a.strapId != b.strapId ||
+    a.deleted != b.deleted;
+
+bool strapSemanticallyDifferent(Strap a, Strap b) =>
+    a.name != b.name ||
+    a.material != b.material ||
+    a.color != b.color ||
+    a.widthMm != b.widthMm ||
+    a.watchId != b.watchId ||
+    a.notes != b.notes ||
+    a.deleted != b.deleted;
+
+bool strapSwapSemanticallyDifferent(StrapSwap a, StrapSwap b) =>
+    a.strapId != b.strapId ||
+    a.watchId != b.watchId ||
+    a.day != b.day ||
+    a.note != b.note ||
+    a.deleted != b.deleted;
+
+bool watchServiceSemanticallyDifferent(WatchService a, WatchService b) =>
+    a.watchId != b.watchId ||
+    a.day != b.day ||
+    a.kind != b.kind ||
+    a.description != b.description ||
+    a.cost != b.cost ||
+    a.currency != b.currency ||
+    a.nextDueDay != b.nextDueDay ||
+    a.deleted != b.deleted;

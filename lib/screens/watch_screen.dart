@@ -12,6 +12,7 @@ import '../state/watch_store.dart';
 import '../theme/app_theme.dart';
 import '../theme/palettes.dart';
 import '../widgets/section_header.dart';
+import '../widgets/watch_accessories.dart';
 import '../widgets/terminal_card.dart';
 import '../widgets/terminal_chip.dart';
 
@@ -49,6 +50,12 @@ class WatchScreen extends StatelessWidget {
           if (collection.isEmpty && store.watches.isEmpty)
             _EmptyWatchState(palette: p)
           else ...[
+            WatchNextCard(palette: p),
+            const SizedBox(height: 10),
+            ServiceDueList(palette: p),
+            const SizedBox(height: 10),
+            StrapLibrary(palette: p),
+            const SizedBox(height: 14),
             _WearTodayCard(palette: p),
             const SizedBox(height: 14),
             _StatsStrip(palette: p),

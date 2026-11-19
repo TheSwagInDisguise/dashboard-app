@@ -20,6 +20,7 @@ import '../widgets/blinking_cursor.dart';
 import '../widgets/section_header.dart';
 import '../widgets/task_row.dart';
 import '../widgets/task_sheet.dart';
+import '../widgets/today_command_prompt.dart';
 import '../widgets/terminal_card.dart';
 import '../widgets/terminal_chip.dart';
 
@@ -64,6 +65,8 @@ class TodayScreen extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           _WeekStrip(palette: p, habits: context.watch<HabitStore>(), tasks: store),
+          const SizedBox(height: 10),
+          TodayCommandPrompt(palette: p),
           const SizedBox(height: 12),
 
           // ---------- content (single column — foldable layout removed) ----------
